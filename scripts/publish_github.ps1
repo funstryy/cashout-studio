@@ -26,7 +26,11 @@
 param(
     [string]$Name = "cashout-studio",
     [string]$Owner = "",
-    [string]$Tag = "v1.0.0"
+    [string]$Tag = "v1.0.0",
+    # Where build.py leaves the installer. Defaults to a sibling of the
+    # repository, which is where it lives, rather than an absolute path
+    # that stops being true the moment either folder is renamed.
+    [string]$SetupOut = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,7 +53,13 @@ if ((git status --porcelain).Length -gt 0) {
     throw "The working tree has uncommitted changes. Commit or stash them first."
 }
 
-$setupDir = "C:\Users\lucyn\Cashout Studio Setup\out"
+if (-not $SetupOut) {
+    $SetupOut = Join-Path (Split-Path -Parent $repoRoot) "Cashout Studio Setup\out"
+}
+$setupDir = $SetupOut
+if (-not (Test-Path $setupDir)) {
+    throw "Installer output not found: $setupDir`nPass -SetupOut <path> if it is elsewhere."
+}
 $assets = @(
     "$setupDir\Cashout Studio 1.0.0.rar",
     "$setupDir\CashoutStudio-Setup-1.0.0.exe",
