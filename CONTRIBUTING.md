@@ -85,6 +85,4 @@ right.
 ## Licence
 
 Contributions are accepted under the MIT licence, the same as the rest of
-the project. Cashout Studio is a derivative of
-[Remiqora](https://github.com/inikolax/remiqora) by Nikolay Cherkashin and
-that copyright notice stays in every copy, as the licence requires.
+the project.

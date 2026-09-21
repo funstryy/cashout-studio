@@ -69,5 +69,3 @@ Cashout Studio is built by Alexander Gary Hubel Michael Di Ienno, Yurii
 Grechko, Antonio Aguiar and the rest of Cashout Pt.5, in Fair Lawn, New
 Jersey.
 
-It is a derivative of [Remiqora](https://github.com/inikolax/remiqora) by
-Nikolay Cherkashin, used under the MIT licence.

@@ -259,7 +259,7 @@ Cashout Studio's own code (this repository) is [MIT-licensed](LICENSE). That cov
   - **YuE2-3B**: the model weights (unlike audio.cpp's own Apache-2.0 *code*) are distributed under **CC BY-NC 4.0**. That means tracks generated through YuE2 **cannot be used commercially** without separate permission from the rights holder, and attribution is required for any use.
 - Before publishing, monetizing, or otherwise distributing a generated track, **check the current license terms of that specific model** on its HuggingFace/weights page: those terms belong to the model's own rights holder and can change independently of this repository.
 - Cashout Studio is provided "as is", with no warranty of any kind. By using it, you accept that verifying a generated track's compliance with applicable law and with the license of the model that produced it is solely your responsibility.
-- **Attribution**: if you fork, copy, or build on Cashout Studio's code, keep the credit: a link back to this repository and to Nikolay Cherkashin ([inikolax](https://github.com/inikolax)) as the original author. The MIT license above already requires keeping the copyright notice in any copy; this is just that requirement spelled out plainly.
+- **Attribution**: if you fork, copy, or build on Cashout Studio's code, keep the credit: a link back to this repository. The MIT license above already requires keeping the copyright notice in any copy; this is just that requirement spelled out plainly.
 
 ---
 
