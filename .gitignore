@@ -15,6 +15,14 @@ external/ACE-Step-1.5/
 external/audio.cpp/
 external/Demucs/
 
+# Portable distribution output (build_dist.py) and installer payload/output
+# (build_installer.py)
+/Remiqora/
+/build/
+
+# Build tooling cloned locally, not vendored
+/ninja/
+
 # Editor/OS
 .DS_Store
 Thumbs.db
@@ -22,3 +30,26 @@ Thumbs.db
 
 # Claude Code local settings (session permissions/config, not project-relevant)
 .claude/
+
+# Packaged app produced by build_dist.py. 186 MB of frozen output that is
+# rebuilt from source on demand, so it has no business in history.
+/CashoutStudio/
+
+# Native build trees. The sources beside them are versioned; these are not.
+engine/build/
+engine/build-core/
+host/build/
+
+# The VST3 SDK is cloned by the engine's build script, not vendored: it
+# carries its own history and its own licence.
+external/vst3sdk/
+
+# Local working material, not part of the product: trained weights, the
+# source project for the intro animation, and loose audio dropped in the
+# root for testing. The intro clip the app actually ships is versioned
+# under frontend/public/intro/.
+/Trained models/
+/cashout studio intro animation/
+/*.mp3
+/*.wav
+/*.flac
