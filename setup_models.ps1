@@ -1,14 +1,25 @@
 #Requires -Version 5.1
 <#
 Clones the original ACE-Step-1.5 and audio.cpp (YuE2) repositories into
-external/, applies Remiqora's small patches on top (see
-external/patches/README.md), builds/prepares each engine, sets up a
-Demucs (stem separation) uv project in external/Demucs, and writes
-backend/.env with all of the above plus an auto-detected FFMPEG_BIN_DIR.
+external/, applies Cashout Studio's small patches on top (see
+external/patches/README.md), builds/prepares each engine for AMD hardware on
+Windows 10, sets up a Demucs (stem separation) uv project in
+external/Demucs, and writes backend/.env with an auto-detected
+FFMPEG_BIN_DIR.
+
+AMD/Windows 10 notes (see README for the full writeup):
+  - YuE2 (audio.cpp) is built with its Vulkan compute backend
+    (-Preset windows-vulkan-release). Vulkan works on any GPU vendor and
+    needs no vendor SDK at runtime, so this is the reliable AMD GPU path.
+  - ACE-Step-1.5 and Demucs are PyTorch-based, and PyTorch has no Vulkan
+    path. On AMD it needs ROCm, whose Windows wheels want Windows 11 and a
+    supported card, so these two run on CPU torch here. torch-directml was
+    tried and dropped: ACE-Step has no DirectML device-selection path, so it
+    never actually ran anything on the GPU, and directml's torch 2.4.1 pin
+    broke ACE-Step's own dependencies (see Install-TorchCpu below).
 
 Re-run any time - every step is idempotent (skips work that is already done).
 #>
-
 param(
     [switch]$SkipBuild,
     [switch]$SkipWeights
@@ -37,7 +48,7 @@ function Find-FfmpegBinDir {
     if ($cmd) {
         return Split-Path -Parent $cmd.Source
     }
-    # Not on PATH yet - most likely setup_prereqs.bat just installed it via
+    # Not on PATH yet - most likely setup_prereqs.ps1 just installed it via
     # winget in *this same terminal*; PATH only picks that up in a new one.
     # Look directly in winget's package cache instead of waiting for that.
     $searchRoots = @(
@@ -68,22 +79,11 @@ function Initialize-Repo($dirName, $repoUrl, $refName, $patchFile) {
         $alreadyDone = Test-Path $markerFile
         if (-not $alreadyDone) {
             Write-Host "Checking out $refName ..."
-            # A plain "git clone" (no --single-branch/--depth) already fetches
-            # every branch's full history, so the pinned commit is normally
-            # already present - just check it out directly. We deliberately
-            # avoid "git fetch origin <sha>": GitHub rejects fetching a raw
-            # commit SHA as if it were a ref name ("couldn't find remote ref"),
-            # and $ErrorActionPreference = "Stop" turns that expected stderr
-            # output into a script-ending exception before the $LASTEXITCODE
-            # fallback below ever gets a chance to run.
             $prevPref = $ErrorActionPreference
             $ErrorActionPreference = "Continue"
             git checkout $refName 2>$null
             $checkedOut = ($LASTEXITCODE -eq 0)
             if (-not $checkedOut) {
-                # Commit isn't reachable yet (e.g. history was rewritten
-                # upstream since this ref was pinned, or this clone happened
-                # to be shallow) - fetch everything and retry once.
                 git fetch origin 2>$null
                 git checkout $refName 2>$null
                 $checkedOut = ($LASTEXITCODE -eq 0)
@@ -107,45 +107,111 @@ function Initialize-Repo($dirName, $repoUrl, $refName, $patchFile) {
     return $dir
 }
 
-Write-Step "ACE-Step-1.5"
+# Installs the CPU build of torch that ACE-Step's own dependency set is
+# written against. Run from inside the target project's directory so uv picks
+# up its .venv.
+#
+# Why CPU and not torch-directml: directml pins torch 2.4.1, but ACE-Step
+# targets 2.7.1 on Windows and leaves `diffusers` unpinned - so the resolver
+# installs a current diffusers whose custom-op registration torch 2.4.1
+# cannot parse, and the VAE fails to import with "Parameter q has unsupported
+# type torch.Tensor" the first time you generate. Holding torch three minor
+# versions behind the rest of the stack bought nothing anyway: ACE-Step has
+# no DirectML device-selection path, so torch-directml never ran a single
+# operation for it.
+#
+# Returns the pins to re-assert on every later "uv pip install" in this venv:
+# otherwise uv is free to satisfy some other package's looser constraint by
+# quietly swapping torch out from under the build that was just installed.
+function Install-TorchCpu {
+    $torchPins = @("torch==2.7.1", "torchvision==0.22.1", "torchaudio==2.7.1")
+    Write-Host "Installing CPU torch 2.7.1 (matches ACE-Step's Windows target) ..."
+    uv pip install @torchPins --index-url https://download.pytorch.org/whl/cpu
+    if ($LASTEXITCODE -ne 0) {
+        throw "torch install failed (exit $LASTEXITCODE)."
+    }
+    return $torchPins
+}
+
+Write-Step "ACE-Step-1.5 (AMD/Windows 10 setup)"
 $aceDir = Initialize-Repo "ACE-Step-1.5" "https://github.com/ace-step/ACE-Step-1.5.git" "ca1e85f" (Join-Path $patchesDir "ace-step.patch")
 
 if (Assert-Command "uv" "Install it from https://docs.astral.sh/uv/getting-started/installation/") {
     Push-Location $aceDir
     try {
-        Write-Host "Running 'uv sync' (this also pulls the CUDA build of PyTorch, can take a while) ..."
-        uv sync
+        if (-not (Test-Path ".venv")) {
+            Write-Host "Creating .venv (Python 3.12) ..."
+            uv venv --python 3.12
+        }
+        $torchPins = Install-TorchCpu
+        # requirements-rocm.txt is upstream's non-CUDA dependency list (no
+        # torch/torchvision/torchaudio pin of its own, and already excludes
+        # CUDA-only extras like torchao/flash-attn/triton-windows) - reuse it
+        # here as-is on top of the CPU torch installed above.
+        # Re-asserting $torchPins in this same command is required, not just
+        # redundant: without it, uv's resolver is free to swap torch for
+        # whatever some other package here (accelerate/lightning/diffusers)
+        # accepts, silently replacing the build everything else was resolved
+        # against.
+        Write-Host "Installing remaining dependencies (requirements-rocm.txt) ..."
+        uv pip install -r requirements-rocm.txt @torchPins
+
+        # The backend launches this via "uv run --no-sync acestep-api", which
+        # execs the "acestep-api" console-script entry point declared in
+        # ACE-Step-1.5's own pyproject.toml ([project.scripts]). That entry
+        # point is only created when the project itself gets installed into
+        # .venv (editable, so it stays in sync with the checked-out source) -
+        # the dependency-only installs above never do that on their own.
+        # --no-deps: dependencies are already pinned and installed above;
+        # this step must not re-resolve them (that's what pulled in the cu128
+        # torch build the first time - see Install-TorchCpu's comment).
+        Write-Host "Installing ACE-Step-1.5 itself (editable, for the acestep-api entry point) ..."
+        uv pip install -e . --no-deps
     } finally {
         Pop-Location
     }
 } else {
-    Write-Host "Skipped 'uv sync' - install uv and re-run this script." -ForegroundColor Yellow
+    Write-Host "Skipped ACE-Step dependency install - install uv and re-run this script." -ForegroundColor Yellow
 }
 
-Write-Step "audio.cpp (YuE2)"
-# No patch needed here anymore - upstream's dev branch now natively exposes
-# the generated/used ABC plan as a response artifact (the one thing our own
-# patch used to add), so this is a plain checkout. dev is a moving,
-# occasionally force-pushed branch upstream; if this exact commit 404s, bump
-# it to a current dev commit (see external/patches/README.md).
+Write-Step "audio.cpp (YuE2 - Vulkan build)"
+# No patch needed here - upstream's dev branch natively exposes what our own
+# patch used to add. dev is a moving, occasionally force-pushed branch
+# upstream; if this exact commit 404s, bump it (see external/patches/README.md).
 $audioCppDir = Initialize-Repo "audio.cpp" "https://github.com/0xShug0/audio.cpp.git" "39f9013" $null
 
 if ($SkipBuild) {
     Write-Host "Skipping build (-SkipBuild passed)."
 } else {
     $haveCmake = Assert-Command "cmake" "Install CMake from https://cmake.org/download/"
-    $haveNvcc = Assert-Command "nvcc" "Install the CUDA Toolkit from https://developer.nvidia.com/cuda-downloads"
-    if ($haveCmake -and $haveNvcc) {
+    if ($haveCmake) {
         Push-Location $audioCppDir
         try {
-            Write-Host "Building audiocpp_server (CUDA release, yue2+sheetsage2+muscriptor) ..."
-            Write-Host "This needs Visual Studio Build Tools (C++ workload) on PATH; if the build" -ForegroundColor DarkGray
-            Write-Host "fails here, open a 'Developer PowerShell for VS' and re-run this script." -ForegroundColor DarkGray
-            powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\build_windows.ps1" `
-                -Preset windows-cuda-release `
-                -ModelSet custom -Models "yue2,sheetsage2,muscriptor" `
-                -NativeModelManager `
-                -Target audiocpp_server
+            $models = "yue2,sheetsage2,muscriptor,chatterbox,seed_vc,bs_roformer,mel_band_roformer,htdemucs"
+            Write-Host "Building audiocpp_server (Vulkan release, $models) ..."
+            Write-Host "Needs the Vulkan SDK (setup_prereqs.ps1) and VS Build Tools C++ workload on PATH;" -ForegroundColor DarkGray
+            Write-Host "if the build fails here, open a 'Developer PowerShell for VS' and re-run this script." -ForegroundColor DarkGray
+            # chatterbox + seed_vc are the voice models: speaking in an
+            # imported voice, and converting existing audio (including
+            # singing) to it. See backend/app/voices.py.
+            # bs_roformer/mel_band_roformer/htdemucs are the separation
+            # models behind the UVR-style separation lab - several on
+            # purpose, since ensembling them is the point. See
+            # backend/app/separation.py.
+            foreach ($target in "audiocpp_server", "audiocpp_cli") {
+                # audiocpp_cli as well as the server: voice conversion has no
+                # HTTP route in the server, so Cashout Studio runs it as a CLI job.
+                Write-Host "  target: $target"
+                powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\build_windows.ps1" `
+                    -Preset windows-vulkan-release `
+                    -ModelSet custom -Models $models `
+                    -NativeModelManager `
+                    -DeploymentBuild `
+                    -Target $target
+                if ($LASTEXITCODE -ne 0) {
+                    throw "audio.cpp Vulkan build of $target failed (exit $LASTEXITCODE) - see external/audio.cpp/README.md."
+                }
+            }
         } finally {
             Pop-Location
         }
@@ -160,10 +226,12 @@ if ($SkipWeights) {
     Write-Step "YuE2/SheetSage2/MuScriptor weights"
     Write-Host "Skipping weight downloads (-SkipWeights passed)."
 } elseif (Assert-Command "python" "Install Python 3 and put it on PATH.") {
-    Write-Step "YuE2/SheetSage2/MuScriptor weights (~10 GB total)"
+    Write-Step "YuE2/SheetSage2/MuScriptor + voice model weights (~12 GB total)"
     Push-Location $audioCppDir
     try {
-        foreach ($pkg in "yue2_main_q8_0", "yue2_main_q4_0", "yue2_vae_f16", "sheetsage2_orig", "muscriptor_small_f32") {
+        foreach ($pkg in "yue2_main_q8_0", "yue2_main_q4_0", "yue2_vae_f16", "sheetsage2_orig", "muscriptor_small_f32",
+                         "chatterbox_q8_0", "seed_vc_mlx_q8_0",
+                         "bs_roformer_q8_0", "mel_band_roformer_q8_0", "htdemucs_q8_0") {
             Write-Host "Installing $pkg ..."
             python tools/model_manager_v2.py install $pkg
         }
@@ -177,95 +245,63 @@ if ($SkipWeights) {
 # here - acestep-api downloads them itself via HuggingFace/ModelScope on its
 # first request, the same way its Gradio UI does.
 
-Write-Step "Demucs (stem separation)"
-# Not an upstream repo to clone - just a throwaway uv project with the
-# `demucs` PyPI package installed into it. Written out explicitly (rather
-# than a plain "uv init" + "uv add demucs") to avoid two problems hit in
-# practice:
-#  1. A bare "uv add demucs" resolves torch from plain PyPI, which on
-#     Windows is a CPU-only wheel - stem separation would silently run on
-#     CPU instead of alongside the GPU model like the UI expects. Routing
-#     "torch" at PyTorch's own cu128 wheel index below (same index
-#     ACE-Step-1.5's own pyproject.toml uses) fixes that.
-#  2. "uv init"'s default requires-python tracks whatever Python is newest
-#     on the machine, which can be newer than what PyTorch's cu128 wheels
-#     support yet - uv then falls back to the CPU wheel again, silently.
-#     Pinning requires-python to ACE-Step-1.5's own range sidesteps that.
-# `numpy` is listed explicitly too: demucs imports it directly (see
-# demucs/transformer.py) but its own package metadata doesn't declare it as
-# a dependency, so it's otherwise missing and demucs fails to import.
+Write-Step "Demucs (stem separation, AMD/Windows 10 setup)"
 $demucsDir = Join-Path $externalDir "Demucs"
 if (-not (Test-Path $demucsDir)) {
     New-Item -ItemType Directory -Path $demucsDir -Force | Out-Null
 }
-$demucsProjectFile = Join-Path $demucsDir "pyproject.toml"
-if (-not (Test-Path $demucsProjectFile)) {
-    Write-Host "Writing $demucsProjectFile ..."
-    @'
-[project]
-name = "demucs-runner"
-version = "0.1.0"
-requires-python = ">=3.11,<3.13"
-dependencies = [
-    "demucs>=4.0.1",
-    "numpy>=1.26.4",
-    "torch>=2.11.0",
-]
-
-[tool.uv]
-package = false
-
-[[tool.uv.index]]
-name = "pytorch-cu128"
-url = "https://download.pytorch.org/whl/cu128"
-explicit = true
-
-[tool.uv.sources]
-torch = { index = "pytorch-cu128" }
-'@ | Set-Content -Encoding utf8 $demucsProjectFile
-}
-
 if (Assert-Command "uv" "Install it from https://docs.astral.sh/uv/getting-started/installation/") {
     Push-Location $demucsDir
     try {
-        Write-Host "Running 'uv sync' for Demucs (this also pulls the CUDA build of PyTorch, can take a while) ..."
-        uv sync
+        if (-not (Test-Path ".venv")) {
+            Write-Host "Creating .venv (Python 3.12) ..."
+            uv venv --python 3.12
+        }
+        $torchPins = Install-TorchCpu
+        # numpy explicitly: demucs imports it directly (see
+        # demucs/transformer.py) but its own package metadata doesn't
+        # declare it as a dependency, so it's otherwise missing at import time.
+        # $torchPins re-asserted here for the same reason as ACE-Step above -
+        # otherwise demucs's own torch constraint can pull the resolver onto
+        # a different build than the one just installed.
+        Write-Host "Installing demucs ..."
+        uv pip install demucs numpy @torchPins
     } finally {
         Pop-Location
     }
 } else {
-    Write-Host "Skipped Demucs 'uv sync' - install uv and re-run this script." -ForegroundColor Yellow
+    Write-Host "Skipped Demucs dependency install - install uv and re-run this script." -ForegroundColor Yellow
 }
 
 Write-Step "backend/.env"
-$envExample = Join-Path $root "backend\.env.example"
 $envFile = Join-Path $root "backend\.env"
 $ffmpegBinDir = Find-FfmpegBinDir
 if ($ffmpegBinDir) {
     Write-Host "Found ffmpeg at $ffmpegBinDir"
 } else {
-    Write-Host "Could not find ffmpeg (install it via setup_prereqs.bat) - FFMPEG_BIN_DIR will need setting by hand." -ForegroundColor Yellow
+    Write-Host "Could not find ffmpeg (install it via setup_prereqs.ps1) - FFMPEG_BIN_DIR will need setting by hand." -ForegroundColor Yellow
 }
 if (-not (Test-Path $envFile)) {
-    $envLines = (Get-Content $envExample) `
-        -replace [regex]::Escape("E:\AI\ACE\ACE-Step-1.5"), $aceDir `
-        -replace [regex]::Escape("E:\AI\YuE2-3B"), $audioCppDir `
-        -replace [regex]::Escape("E:\AI\Demucs"), $demucsDir
+    $envLines = @(
+        "ACE_STEP_DIR=$aceDir",
+        "YUE2_DIR=$audioCppDir",
+        "DEMUCS_DIR=$demucsDir",
+        "YUE2_BUILD_DIR=windows-vulkan-release"
+    )
     if ($ffmpegBinDir) {
-        $envLines = $envLines -replace [regex]::Escape("E:\AI\ACE\tools\ffmpeg-shared\ffmpeg-master-latest-win64-gpl-shared\bin"), $ffmpegBinDir
+        $envLines += "FFMPEG_BIN_DIR=$ffmpegBinDir"
     }
     $envLines | Set-Content $envFile
     Write-Host "Wrote backend/.env pointing at the cloned repos."
-    if ($ffmpegBinDir) {
-        Write-Host "Still check CUDA_BIN_DIR in backend/.env for your machine." -ForegroundColor Yellow
-    } else {
-        Write-Host "Still edit FFMPEG_BIN_DIR and CUDA_BIN_DIR in backend/.env for your machine." -ForegroundColor Yellow
+    if (-not $ffmpegBinDir) {
+        Write-Host "Still add FFMPEG_BIN_DIR to backend/.env by hand (see backend/.env.example)." -ForegroundColor Yellow
     }
 } else {
     Write-Host "backend/.env already exists - not overwriting. Cloned repo paths:"
     Write-Host "  ACE_STEP_DIR=$aceDir"
     Write-Host "  YUE2_DIR=$audioCppDir"
     Write-Host "  DEMUCS_DIR=$demucsDir"
+    Write-Host "  YUE2_BUILD_DIR=windows-vulkan-release"
     if ($ffmpegBinDir) {
         Write-Host "  FFMPEG_BIN_DIR=$ffmpegBinDir (detected - edit backend/.env if it doesn't already match)"
     }
@@ -274,7 +310,7 @@ if (-not (Test-Path $envFile)) {
 Write-Step "Done"
 Write-Host "Remaining manual steps (see README.md):"
 if (-not $ffmpegBinDir) {
-    Write-Host "  - Install ffmpeg (setup_prereqs.bat) and point FFMPEG_BIN_DIR at its bin folder."
+    Write-Host "  - Install ffmpeg (setup_prereqs.ps1) and add FFMPEG_BIN_DIR to backend/.env."
 }
 Write-Host "  - ACE-Step's own checkpoints download automatically on its first request."
 Write-Host "  - Then run dev.bat or prod_run.bat."

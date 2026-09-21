@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 echo ===================================================
-echo   Remiqora - ACE-Step / YuE2 setup (clone+patch)
+echo   Cashout Studio - ACE-Step / YuE2 setup (clone+patch)
 echo ===================================================
 echo.
 

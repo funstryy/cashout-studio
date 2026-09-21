@@ -4,3 +4,8 @@ httpx>=0.27
 pydantic>=2.9
 python-multipart>=0.0.12
 python-dotenv>=1.0
+# Native window for the desktop build (WebView2 on Windows) - see run_desktop.py.
+pywebview>=5.3
+# Ensemble combination of separation model outputs - see audio_buffers.py.
+numpy>=1.26
+psutil

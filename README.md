@@ -1,11 +1,11 @@
 <p align="right"><b>English</b> · <a href="README.ru.md">Русский</a></p>
 
 <p align="center">
-  <img src="frontend/public/favicon.svg" width="88" height="88" alt="Remiqora">
+  <img src="frontend/public/cashout-studio-logo.svg" width="88" height="88" alt="Cashout Studio">
 </p>
 
-<h1 align="center">Remiqora</h1>
-<p align="center"><i>Made with AI. Made by you.</i></p>
+<h1 align="center">Cashout Studio</h1>
+<p align="center"><i>Made by Cashout PT.5</i></p>
 
 <p align="center">
   A local, GPU-powered music generation and production studio — one interface for <b>ACE-Step 1.5</b> and <b>YuE2-3B</b>, with a built-in multitrack DAW.
@@ -17,14 +17,14 @@
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-eab308?style=flat-square">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square"></a>
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-0f0f14?style=flat-square">
-  <img alt="GPU" src="https://img.shields.io/badge/GPU-NVIDIA%20CUDA-76B900?style=flat-square">
+  <img alt="GPU" src="https://img.shields.io/badge/GPU-AMD%20Vulkan%20%7C%20NVIDIA%20CUDA-0ea5e9?style=flat-square">
   <img alt="Stack" src="https://img.shields.io/badge/stack-Vue%203%20%2B%20FastAPI-a855f7?style=flat-square">
   <img alt="UI languages" src="https://img.shields.io/badge/UI-EN%20%2F%20RU-ec4899?style=flat-square">
   <a href="https://ko-fi.com/inikolax"><img alt="Support on Ko-fi" src="https://img.shields.io/badge/Support-Ko--fi-FF5E5B?style=flat-square&logo=ko-fi&logoColor=white"></a>
 </p>
 
 <p align="center">
-  <img src="docs/hero-poster.png" alt="Remiqora — made with AI, made by you" width="900">
+  <img src="docs/hero-poster.png" alt="Cashout Studio — made with AI, made by you" width="900">
 </p>
 
 <p align="center">
@@ -33,6 +33,8 @@
   <a href="#ace-step-generation">ACE-Step</a> ·
   <a href="#yue2-and-sheetsage2-generation">YuE2</a> ·
   <a href="#lora-training-ace-step">LoRA</a> ·
+  <a href="#voices">Voices</a> ·
+  <a href="#separation-lab-uvr-style">Separation</a> ·
   <a href="#built-in-daw">DAW</a> ·
   <a href="#built-with">Built with</a> ·
   <a href="#license--liability-for-generated-content">License</a> ·
@@ -43,7 +45,7 @@
 
 ## Why this exists
 
-ACE-Step and YuE2 are two independent music generation engines, each with its own web UI, its own result-storage format, and its own process that has to be started and stopped by hand. They typically cannot run simultaneously on a single consumer GPU. Remiqora solves this with a single layer on top:
+ACE-Step and YuE2 are two independent music generation engines, each with its own web UI, its own result-storage format, and its own process that has to be started and stopped by hand. They typically cannot run simultaneously on a single consumer GPU. Cashout Studio solves this with a single layer on top:
 
 - **One UI** instead of two different interfaces with different UX.
 - **Mutually-exclusive orchestrator**: pick a model in the header — it starts up, and the other one stops on its own. No need to manually kill processes before starting the other engine.
@@ -61,6 +63,8 @@ ACE-Step and YuE2 are two independent music generation engines, each with its ow
 | **YuE2-3B** | Full-length track generation with CoT score planning (a symbolic ABC plan before the audio). |
 | **SheetSage2** | Extracts melody and harmony from a reference track into ABC notation — used as YuE2's input. |
 | **LoRA training** | Dataset → auto-labeling → preprocessing → training → export — the whole ACE-Step fine-tuning pipeline for your own voice/style, in the browser. |
+| **Voices** | Import a voice clip, then speak text in it (Chatterbox) or re-sing an existing track in it (Seed-VC). |
+| **Separation lab** | UVR-style multi-model separation with spectral ensembles (BS-RoFormer, Mel-Band RoFormer, HTDemucs), on the GPU. |
 | **Demucs** | Splits any track into 4 stems: vocals, drums, bass, other. |
 | **MuScriptor** | Transcribes audio (the full mix or a single stem) into MIDI notes. |
 | **Built-in DAW** | A multitrack timeline editor for assembling tracks/stems into a final mix. |
@@ -104,6 +108,55 @@ The full ACE-Step fine-tuning pipeline on your own dataset, no console required:
 4. **Preprocessing** — converts labeled samples into tensors.
 5. **Training** — LoRA rank/alpha/dropout, learning rate, epochs, batch size, FP8, gradient checkpointing, live progress with an ETA and a TensorBoard link.
 6. **Export and registry** — the finished adapter is immediately added to the LoRA list on the generation form.
+
+## Voices
+
+Import a voice once and use it anywhere — no training run involved. Both
+models read your reference clip at generation time, which is what makes this
+usable on a card that could never finish a fine-tune.
+
+1. **Import** — drop in a clean 5–20 second clip (one speaker, no music). It's
+   stored as the voice library audio.cpp reads directly, so it's immediately
+   selectable as a cloning reference.
+2. **Speak** — type text, get it spoken in that voice (Chatterbox, 19 languages).
+3. **Convert** — re-sing or re-speak existing audio in that voice (Seed-VC,
+   with a dedicated singing path). Point it at a saved track — ideally at its
+   isolated vocal stem, one click away via Demucs — or at any uploaded file.
+   The result lands in your track library like any other track.
+
+Voices live inside YuE2's engine process, so the **Voices** tab appears while
+YuE2 is the active model.
+
+## Separation lab (UVR-style)
+
+The same workflow Ultimate Vocal Remover made standard — pick models, ensemble
+them, audition the result — running on `audio.cpp`'s native separation models,
+so it is GPU work on any vendor rather than a CPU-bound PyTorch stack.
+
+| Model | Stems | Notes |
+|---|---|---|
+| **BS-RoFormer ep368** | vocals, instrumental | Band-split transformer, the current quality leader for vocal isolation. |
+| **Mel-Band RoFormer** | vocals, instrumental | Mel-band sibling; disagrees with BS-RoFormer in useful ways, which is what makes an ensemble worth running. |
+| **HTDemucs v4** | vocals, drums, bass, other | The four-way split. |
+
+**Ensemble mode** runs several models over the same track and combines each
+stem they share:
+
+- **Max Spec** — per time-frequency bin, keep the loudest model. Fuller; recovers detail a single model missed.
+- **Min Spec** — keep the quietest. Cleaner; drops anything the models disagree about, which is usually bleed.
+- **Average** — plain waveform mean. Safe, slightly duller transients.
+
+Phase travels with whichever magnitude won each bin, so the combination
+doesn't smear. The instrumental is derived from the vocals the ensemble
+actually produced, which keeps the two halves summing back to the original
+mix — measured residual on a test separation is ~6e-05 RMS, so layering them
+in the editor reconstructs the source instead of leaving residue.
+
+Options mirror what you'd expect: GPU toggle, output as WAV/FLAC/MP3, vocals
+or instrumental only, and a 30-second **sample mode** for trying settings
+without processing a whole song (it deliberately doesn't touch the track's
+saved stems). Finished stems attach to the track, so the mixer, MIDI
+transcription and the DAW all pick them up.
 
 ## Stem separation (Demucs)
 
@@ -149,7 +202,7 @@ Any number of tracks, onto which you can add anything from the shared library (a
 
 ## Built with
 
-Remiqora is a UI and orchestrator on top of third-party inference engines. Their code isn't vendored into this repository — only small functional patches (`external/patches/`) on top of the originals:
+Cashout Studio is a UI and orchestrator on top of third-party inference engines. Their code isn't vendored into this repository — only small functional patches (`external/patches/`) on top of the originals:
 
 | Project | What's used | License |
 |---|---|---|
@@ -163,15 +216,15 @@ Patch details and exact base commits are in [`external/patches/README.md`](exter
 
 ## License & liability for generated content
 
-Remiqora's own code (this repository) is [MIT-licensed](LICENSE). That covers the UI and orchestrator only — it is a separate thing from the license of a *track* you generate with it. Remiqora is an orchestrator, not a generator with its own model — all audio is produced by third-party engines (ACE-Step 1.5, YuE2-3B, and the SheetSage2/MuScriptor tools built on top of them). Because of that:
+Cashout Studio's own code (this repository) is [MIT-licensed](LICENSE). That covers the UI and orchestrator only — it is a separate thing from the license of a *track* you generate with it. Cashout Studio is an orchestrator, not a generator with its own model — all audio is produced by third-party engines (ACE-Step 1.5, YuE2-3B, and the SheetSage2/MuScriptor tools built on top of them). Because of that:
 
-- **The author of Remiqora takes no responsibility** for what happens to tracks generated through this app afterward — commercial or otherwise, published or private. Whatever you create, and how you use it next, is entirely your own responsibility.
+- **The author of Cashout Studio takes no responsibility** for what happens to tracks generated through this app afterward — commercial or otherwise, published or private. Whatever you create, and how you use it next, is entirely your own responsibility.
 - **A generated track is covered by the license of whichever model produced it**, not by a license from this repository. The table above lists the *code* license — the *model weights* can be licensed differently:
   - **ACE-Step 1.5** — both the code and the model weights are MIT-licensed, and the model's authors explicitly state the generated music can be used commercially.
   - **YuE2-3B** — the model weights (unlike audio.cpp's own Apache-2.0 *code*) are distributed under **CC BY-NC 4.0**. That means tracks generated through YuE2 **cannot be used commercially** without separate permission from the rights holder, and attribution is required for any use.
 - Before publishing, monetizing, or otherwise distributing a generated track, **check the current license terms of that specific model** on its HuggingFace/weights page — those terms belong to the model's own rights holder and can change independently of this repository.
-- Remiqora is provided "as is", with no warranty of any kind. By using it, you accept that verifying a generated track's compliance with applicable law and with the license of the model that produced it is solely your responsibility.
-- **Attribution**: if you fork, copy, or build on Remiqora's code, keep the credit — a link back to this repository and to Nikolay Cherkashin ([inikolax](https://github.com/inikolax)) as the original author. The MIT license above already requires keeping the copyright notice in any copy; this is just that requirement spelled out plainly.
+- Cashout Studio is provided "as is", with no warranty of any kind. By using it, you accept that verifying a generated track's compliance with applicable law and with the license of the model that produced it is solely your responsibility.
+- **Attribution**: if you fork, copy, or build on Cashout Studio's code, keep the credit — a link back to this repository and to Nikolay Cherkashin ([inikolax](https://github.com/inikolax)) as the original author. The MIT license above already requires keeping the copyright notice in any copy; this is just that requirement spelled out plainly.
 
 ---
 
@@ -184,15 +237,19 @@ setup_prereqs.bat
 ```
 
 Via `winget` (built into Windows 10/11), installs Git, Python, `uv`, Node.js,
-CMake, ffmpeg, plus Visual Studio Build Tools (C++ workload) and the CUDA
-Toolkit — those are large, need admin rights, and can take a while.
-`setup_prereqs.bat -SkipHeavy` installs only the small, fast tools, leaving
-Build Tools/CUDA for you to install manually from links the script prints.
+CMake, ffmpeg, plus Visual Studio Build Tools (C++ workload) and the Vulkan
+SDK — the last two are large, need admin rights, and can take a while.
 
-**The NVIDIA GPU driver is deliberately left out** — install it by hand from
-[nvidia.com/drivers](https://www.nvidia.com/drivers) for your card: silently
-swapping a video driver on someone else's machine is risky (it can blank the
-screen and usually needs a reboot on your schedule, not the script's).
+The Vulkan SDK is what makes the GPU side vendor-neutral: `audio.cpp` is
+built against its Vulkan compute backend, which runs on AMD, Intel and
+NVIDIA alike and needs no vendor toolkit at runtime — just the
+`vulkan-1.dll` loader that ships with any modern GPU driver.
+
+**The GPU driver itself is deliberately left out** — install it by hand from
+[AMD](https://www.amd.com/support) or [NVIDIA](https://www.nvidia.com/drivers)
+for your card: silently swapping a video driver on someone else's machine is
+risky (it can blank the screen and usually needs a reboot on your schedule,
+not the script's).
 
 After installing, close the terminal and open a new one so PATH picks up the
 freshly installed tools.
@@ -209,13 +266,12 @@ The script:
 2. Applies a small patch to ACE-Step (a task-cancellation API; audio.cpp
    needs no patch, see `external/patches/README.md`) — without the upstream
    custom web-uis, which aren't needed.
-3. Runs `uv sync` for ACE-Step and builds `audiocpp_server` (CUDA release,
-   `yue2,sheetsage2,muscriptor` models) for audio.cpp.
+3. Installs ACE-Step's dependencies into its own venv and builds
+   `audiocpp_server` (Vulkan release, `yue2,sheetsage2,muscriptor` models)
+   for audio.cpp.
 4. Downloads the YuE2/SheetSage2/MuScriptor GGUF weights (~10 GB) via
    audio.cpp's `tools/model_manager_v2.py`.
-5. Sets up a `demucs` uv project in `external/Demucs` for stem separation,
-   routed at PyTorch's cu128 wheel index so it gets a CUDA build (a plain
-   `uv add demucs` would silently resolve a CPU-only torch wheel instead).
+5. Sets up a `demucs` venv in `external/Demucs` for stem separation.
 6. Creates `backend/.env` with paths to the freshly cloned repositories,
    including `FFMPEG_BIN_DIR` — auto-detected from `ffmpeg`'s winget install
    (`setup_prereqs.bat`), even right after installing it in the same
@@ -228,19 +284,87 @@ UI does.
 The script is idempotent — safe to re-run (the `-SkipBuild` / `-SkipWeights`
 flags skip the corresponding steps). It expects `git`,
 [`uv`](https://docs.astral.sh/uv/getting-started/installation/), Python 3,
-CMake, the CUDA Toolkit and Visual Studio Build Tools (C++ workload) to
+CMake, the Vulkan SDK and Visual Studio Build Tools (C++ workload) to
 already be installed — if any is missing, that step is simply skipped with a
 hint on what to install.
 
-After that, the only manual step left is checking `CUDA_BIN_DIR` in
-`backend/.env` (`FFMPEG_BIN_DIR` is filled in automatically — unless ffmpeg
-wasn't found at all, in which case the script says so and it needs setting
-by hand).
+Nothing is left to fill in by hand afterwards: `FFMPEG_BIN_DIR` is
+auto-detected, and every other path in `backend/.env` is written from the
+folders the script just created.
 
-Hard machine requirements the script can't remove: Windows, a CUDA-capable
-NVIDIA GPU (tested on an RTX 4080 16 GB), and an installed video driver.
+Hard machine requirements the script can't remove: Windows, a GPU with a
+Vulkan-capable driver, and enough VRAM for the engine you run (YuE2-3B at
+`q8_0` is ~3.5 GB; the `q4_0` weights are there for smaller cards).
 
-### Step 2: run
+#### GPU acceleration by vendor
+
+|                        | YuE2 / SheetSage2 / MuScriptor | ACE-Step 1.5 · Demucs |
+| ---------------------- | ------------------------------ | --------------------- |
+| AMD                    | GPU (Vulkan)                   | CPU — see below       |
+| NVIDIA                 | GPU (Vulkan, or rebuild with `-Preset windows-cuda-release` for CUDA) | GPU (CUDA) |
+| Intel                  | GPU (Vulkan)                   | CPU                   |
+
+ACE-Step and Demucs are PyTorch projects, and PyTorch has no Vulkan path —
+on AMD it needs ROCm, whose Windows wheels require Windows 11 (and a
+supported card; RDNA1 isn't one anywhere). So **on AMD, ACE-Step generation
+runs on the CPU** — slow, but it works. YuE2 is the AMD-friendly engine
+here and runs fully on the GPU, as does the separation lab.
+
+`setup_models.ps1` installs CPU torch 2.7.1, the version ACE-Step targets on
+Windows. `torch-directml` was tried and dropped: ACE-Step has no DirectML
+device-selection path, so it never ran a single operation on the GPU, while
+its torch 2.4.1 pin held the stack three minor versions behind ACE-Step's
+own (unpinned) `diffusers` — which crashed the VAE import on the first
+generation with `Parameter q has unsupported type torch.Tensor`.
+
+### Step 2: build the app
+
+```cmd
+python build_dist.py
+```
+
+Builds the SPA, freezes the backend with PyInstaller and leaves a
+self-contained `Cashout Studio\` folder next to `external\`:
+
+```
+Cashout Studio\
+    CashoutStudio.exe       the app — backend plus a native window, no console, no browser
+    frontend_dist\     the built UI it serves
+    .env               copied from backend\.env
+```
+
+Double-click `CashoutStudio.exe` (or `Launch_CashoutStudio.bat`) and the studio opens
+in its own window. The model engines are still started on demand from
+`external\`, so keep that folder alongside — it holds the ~10 GB of weights
+the app deliberately doesn't bundle.
+
+### Step 3: build the installer (optional)
+
+```cmd
+python build_installer.py
+```
+
+Produces `build\installer\CashoutStudio-Setup-0.1.0.exe` — an ordinary Windows
+setup wizard (Inno Setup; install it with
+`winget install --id JRSoftware.InnoSetup`). It bundles the frozen app, both
+`audiocpp` binaries, the engine's `model_specs`, and ffmpeg, so the target
+machine needs no git, compiler, Python or uv.
+
+It installs **per-user** into `%LOCALAPPDATA%\Programs\Cashout Studio` rather than
+Program Files, deliberately: the app keeps its database, generated audio and
+imported voices next to its own executable, which an unelevated process
+cannot write inside Program Files. That also means no admin prompt.
+
+The ~13 GB of model weights are **not** bundled — an installer that size is
+impractical to build or distribute. The wizard has a page for pointing at an
+engine folder you already have (it pre-fills one if it finds
+`%USERPROFILE%\remiqora\external\audio.cpp`), and otherwise installs an empty
+engine folder to fetch them into later.
+
+Uninstalling removes the program but asks before deleting your library, and
+an upgrade never overwrites an `.env` you have edited.
+
+### Running from source instead
 
 ```cmd
 dev.bat
@@ -253,6 +377,9 @@ prod_run.bat
 ```
 Builds the client via `npm run build` and serves the finished SPA bundle together with the API at [http://127.0.0.1:9000](http://127.0.0.1:9000).
 
+`python backend\run_desktop.py` gives you the same native window as the
+packaged build, without freezing it first.
+
 Stem separation's `demucs` uv project is set up by `setup_models.bat` above; the `htdemucs` weights themselves download automatically on first use.
 
 ---
@@ -262,23 +389,35 @@ Stem separation's `demucs` uv project is set up by `setup_models.bat` above; the
 Settings live in `backend/.env` (template: `backend/.env.example`;
 `setup_models.bat` creates it automatically with paths to the cloned repositories):
 ```ini
-ACE_STEP_DIR=E:\AI\ACE\ACE-Step-1.5
-YUE2_DIR=E:\AI\YuE2-3B
-DEMUCS_DIR=E:\AI\Demucs
-FFMPEG_BIN_DIR=E:\AI\ACE\tools\ffmpeg-shared\ffmpeg-master-latest-win64-gpl-shared\bin
-CUDA_BIN_DIR=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.4\bin
+ACE_STEP_DIR=C:\Users\you\remiqora\external\ACE-Step-1.5
+YUE2_DIR=C:\Users\you\remiqora\external\audio.cpp
+DEMUCS_DIR=C:\Users\you\remiqora\external\Demucs
+YUE2_BUILD_DIR=windows-vulkan-release
+FFMPEG_BIN_DIR=C:\Users\you\AppData\Local\Microsoft\WinGet\Packages\...\bin
 ```
 
 - `ACE_STEP_DIR` — root of the cloned and patched ACE-Step-1.5.
-- `YUE2_DIR` — root of the cloned and patched audio.cpp (where `audiocpp_server.exe` is built and the YuE2/SheetSage2/MuScriptor GGUF weights live).
-- `DEMUCS_DIR` — root of the `demucs` uv project used for stem separation.
+- `YUE2_DIR` — root of the cloned audio.cpp (where `audiocpp_server.exe` is built and the YuE2/SheetSage2/MuScriptor GGUF weights live).
+- `DEMUCS_DIR` — root of the `demucs` venv used for stem separation.
+- `YUE2_BUILD_DIR` — which `build\<preset>` folder to launch `audiocpp_server.exe` from.
 - `FFMPEG_BIN_DIR` — folder containing `ffmpeg.exe`/`ffprobe.exe`.
-- `CUDA_BIN_DIR` — the `bin` folder of the installed CUDA Toolkit (needs to be on PATH for `audiocpp_server.exe`).
+
+Every path is optional: unset, each one defaults to `external\<repo>` next
+to the app. The tuning knobs below are optional too — the defaults suit a
+6–8 GB card:
+
+- `YUE2_BACKEND` / `YUE2_DEVICE` — compute backend (`vulkan`, `cuda`, `cpu`, …) and device index for `audiocpp_server` (see `audiocpp_server.exe --list-devices`).
+- `YUE2_MAX_LOADED_MODELS` — how many of YuE2/SheetSage2/MuScriptor may stay resident at once. Defaults to `1`, so an audio→MIDI conversion evicts the generation model instead of trying to hold both.
+- `YUE2_IDLE_UNLOAD_MS` — release VRAM after this long with no inference (default 5 min; `0` disables).
+- `VOICES_DIR` / `VOICE_BACKEND` — where imported reference voices live (default `data/voices` next to the app) and which compute backend voice-conversion jobs use (default: the same as `YUE2_BACKEND`).
+- `DEMUCS_THREADS` / `DEMUCS_DEVICE` — threads a stem separation may use (default: a quarter of the logical CPUs) and which torch device it runs on (default: `cpu`, so stems never take VRAM from an active model).
 
 ---
 
 ## Known limitations
 
-- ACE-Step and YuE2 can't run at the same time — one GPU for both, the orchestrator switches between them mutually exclusively.
+- ACE-Step and YuE2 can now run at the same time, because they no longer compete: YuE2 is on the GPU (Vulkan) and ACE-Step is on the CPU. Set `CONCURRENT_ENGINES=0` to restore the old take-turns behaviour, which is what you want when both target the same GPU. Inside YuE2's own server one model stays resident regardless (`YUE2_MAX_LOADED_MODELS`), so generation and MIDI transcription still take turns rather than competing for VRAM.
+- Stem separation runs on the CPU with a thread cap, so it can proceed alongside an active engine without starving it.
+- On AMD, ACE-Step generation runs on the CPU (see [GPU acceleration by vendor](#gpu-acceleration-by-vendor)).
 - MIDI transcription requires YuE2 specifically to be active (the MuScriptor model loads into its process).
 - Windows only — the install/run scripts are written as `.bat`/`.ps1`.
