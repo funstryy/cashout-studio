@@ -1,0 +1,57 @@
+# What a hosted runner can honestly check.
+#
+# It cannot build the installer: that needs Windows, Inno Setup, a Vulkan
+# build of audio.cpp and about 15 GB of model weights, none of which exist
+# on a clean runner. A workflow that pretended otherwise would fail on
+# every push and teach everyone to ignore the red cross. So this checks
+# the things that are checkable, and the release is built locally and
+# uploaded by hand.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  frontend:
+    name: Frontend build and typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npx vue-tsc --noEmit -p tsconfig.app.json
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+
+  backend:
+    name: Backend imports and syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile every module
+        run: python -m compileall -q backend/app
+      - name: Check the locales stay in step
+        run: python scripts/check_locales.py
+
+  engine:
+    name: Native engine configure
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure without VST3
+        # VST3 hosting needs an SDK the build clones on demand, which is
+        # not worth a CI minute. Configuring proves the CMake is sound.
+        run: cmake -S engine -B engine/build-ci -DCASHOUT_ENGINE_VST3=OFF
+      - name: Build
+        run: cmake --build engine/build-ci --config Release

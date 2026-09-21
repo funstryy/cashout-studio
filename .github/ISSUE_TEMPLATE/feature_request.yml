@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest something the studio should do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: >
+        The problem rather than the solution. "I cannot tell which take is
+        louder" leads somewhere better than "add a LUFS readout to the
+        clip context menu".
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you have in mind
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Does it fit the project
+      description: >
+        Not a test. These are the lines the project tries to hold, and
+        knowing which one your idea pushes on is useful.
+      options:
+        - label: It works without sending the user's audio off their machine
+        - label: It works on a 6 GB graphics card
+        - label: It needs no account, key or subscription

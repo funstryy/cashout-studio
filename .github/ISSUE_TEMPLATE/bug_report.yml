@@ -1,0 +1,68 @@
+name: Bug report
+description: Something in the studio does not work
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: the **Help** tab inside the studio answers the
+        common ones, including clicks and dropouts, an engine that will
+        not start, and a profile that was forgotten. Its search looks
+        inside the answers.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what happened, and what you expected instead.
+      placeholder: |
+        1. Opened the DAW and dragged a wav onto track 1
+        2. Pressed play
+        3. Expected it to play; got silence and no meter movement
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown on the About page, or the installer filename.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where
+      options:
+        - DAW (arrangement, mixer, plugins)
+        - Audio engine (playback, recording, latency)
+        - Mastering or the AI co-producer
+        - Beats, AI Music or Treblo (generation)
+        - Voices or Voice Lab
+        - Separator
+        - Collaboration
+        - Installer or first run
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: machine
+    attributes:
+      label: Machine
+      description: GPU and driver version, Windows version, and how much VRAM.
+      placeholder: "Radeon RX 5600 XT, 6 GB, driver 32.0.21030.2001, Windows 10 22H2"
+    validations:
+      required: true
+  - type: textarea
+    id: message
+    attributes:
+      label: The exact error message
+      description: >
+        Paste it rather than describing it. The studio quotes what actually
+        failed instead of paraphrasing, so the wording carries information.
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log
+      description: From the `logs` folder inside the install directory, if there is anything in it.
+      render: text

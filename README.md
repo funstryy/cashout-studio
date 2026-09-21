@@ -79,7 +79,7 @@ The interface is fully bilingual (Russian/English, switcher in the header).
 
 ## ACE-Step: generation
 
-![ACE-Step: generation and track feed](docs/screenshots/en/02-ace-step.png)
+![ACE-Step: generation and track feed](docs/screenshots/05-ai-music.png)
 
 Two input modes: **“Simple”** — a single text description the model uses to infer both style and lyrics on its own; and **“Custom”** — style tags with autocomplete plus lyrics with structure markup (`[Verse]/[Chorus]/[Bridge]`) and performance annotations (`(whisper)`, `(falsetto)`), or an “Instrumental” checkbox.
 
@@ -94,7 +94,7 @@ Plus: 10–300 s duration, batch of 1/2/4 variants, mp3/wav/flac formats, advanc
 
 ## YuE2 and SheetSage2: generation
 
-![YuE2: generation and track feed](docs/screenshots/en/03-yue2.png)
+![YuE2: generation and track feed](docs/screenshots/03-beats.png)
 
 Three **CoT (Chain-of-Thought)** modes: `off` — straight to audio; `melody` — the arrangement is built around a given melody (ABC); `full` — the model first builds a symbolic plan (melody + chords), then generates the audio.
 
@@ -102,7 +102,7 @@ Three **CoT (Chain-of-Thought)** modes: `off` — straight to audio; `melody` �
 
 ## LoRA training (ACE-Step)
 
-![LoRA training](docs/screenshots/en/04-lora-training.png)
+![LoRA training](docs/screenshots/06-voice-lab.png)
 
 The full ACE-Step fine-tuning pipeline on your own dataset, no console required:
 
@@ -164,25 +164,25 @@ transcription and the DAW all pick them up.
 
 ## Stem separation (Demucs)
 
-![Stem separation](docs/screenshots/en/05-stems-panel.png)
+![Stem separation](docs/screenshots/08-separator.png)
 
 One click splits any saved track into 4 isolated stems (Demucs `htdemucs`), with a progress bar, a separate player and download per stem, and the option to redo or delete. Runs alongside the active generation model (without stopping it), sharing a GPU lock.
 
 ## MIDI transcription (MuScriptor)
 
-![MIDI transcription](docs/screenshots/en/06-midi-panel.png)
+![MIDI transcription](docs/screenshots/07-voices.png)
 
 Transcribes the full mix, or any already-separated stem, into MIDI. Technically this isn't a separate process — it's a model loaded into the already-running YuE2 server, so **transcription requires YuE2 to be the active model**. Result: a built-in Web Audio synth player, a mini piano roll, a note count and BPM readout, and `.mid` download.
 
 ## Mixer
 
-![Stem mixer](docs/screenshots/en/09-mixer.png)
+![Stem mixer](docs/screenshots/02-daw.png)
 
 A fixed 4-channel console (vocals/drums/bass/other + master) for a quick stem mixdown: volume, pan, mute/solo, a 3-band EQ, a compressor, reverb, and VU meters with clipping indication. Settings are saved automatically. The **"Open in editor"** button carries all 4 stems with their current settings into a new full-DAW project — the mixer is meant as a quick preview, the editor as its superset.
 
 ## Built-in DAW
 
-![Editor with a clip on the timeline](docs/screenshots/en/08-editor-with-clip.png)
+![Editor with a clip on the timeline](docs/screenshots/02-daw.png)
 
 Any number of tracks, onto which you can add anything from the shared library (a full mix, a single stem, a file uploaded from disk) — via a picker dialog or by dragging a file straight onto a track.
 

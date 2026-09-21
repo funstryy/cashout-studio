@@ -28,8 +28,11 @@ external/Demucs/
 Thumbs.db
 *.log
 
-# Claude Code local settings (session permissions/config, not project-relevant)
+# Per-machine editor and tooling settings. Nothing here describes the
+# project, so it does not belong to anyone who clones it.
 .claude/
+.vscode/
+.idea/
 
 # Packaged app produced by build_dist.py. 186 MB of frozen output that is
 # rebuilt from source on demand, so it has no business in history.

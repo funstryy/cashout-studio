@@ -1,0 +1,33 @@
+# Line endings.
+#
+# The tree is written on Windows and the build runs there, but the C++ and
+# Python sources are read by tools that care. Normalising on checkin and
+# checking out native keeps `git diff` free of whole-file churn when
+# somebody clones on Linux, which is the usual reason a first contribution
+# arrives as a 12,000-line diff with no changes in it.
+* text=auto
+
+# Scripts whose interpreter refuses the other ending.
+*.ps1   text eol=crlf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.sh    text eol=lf
+
+# Binary, so git never tries to be helpful with them.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.ico   binary
+*.mp4   binary
+*.wav   binary
+*.mp3   binary
+*.flac  binary
+*.vst3  binary
+*.dll   binary
+*.exe   binary
+
+# Generated or vendored, so the language bar on the repository page
+# reflects what is actually written here.
+docs/screenshots/*   linguist-documentation
+external/*           linguist-vendored
