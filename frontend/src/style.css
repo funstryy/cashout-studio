@@ -1,24 +1,59 @@
 @import "tailwindcss";
 
 /*
- * Dark-only theme, matching the accent gradient + status-color language both
- * original per-model UIs already used (purple->pink accent, yellow=queued,
- * purple=running, green=done, red=failed, gray=cancelled).
+ * Cashout Studio 2.0: the workstation theme.
+ *
+ * Dark-only, and deliberately so: this is a tool people sit in front of for
+ * hours in rooms with the lights down, next to FL Studio and Ableton. A light
+ * mode would be a second surface to maintain for a context that does not
+ * happen.
+ *
+ * The whole app is themed from this block. Every panel, border and accent in
+ * the product resolves to a token here, so the palette is one edit rather than
+ * a hunt through a hundred components.
+ *
+ * Colour language
+ * ---------------
+ *   aqua  (accent1)   the product's voice: active nav, primary actions,
+ *                     progress rings, anything the eye should land on first
+ *   sky   (accent2)   the gradient partner, and data - waveforms, meters
+ *   status            unchanged in meaning from the first version, retuned to
+ *                     sit in this palette: amber queued, sky running, emerald
+ *                     done, rose failed, slate cancelled
+ *
+ * Green stays green for "done" rather than becoming aqua. Aqua is now the
+ * accent, and if success shared that colour nothing would read as finished -
+ * it would just read as "the app".
  */
 @theme {
-  --color-bg: #0f0f14;
-  --color-panel: #1a1a22;
-  --color-panel-2: #20202b;
-  --color-border: #2e2e3a;
-  --color-text: #e4e4ec;
-  --color-text-dim: #9a9aab;
-  --color-accent1: #a855f7;
-  --color-accent2: #ec4899;
-  --color-status-queued: #eab308;
-  --color-status-running: #a855f7;
-  --color-status-done: #22c55e;
-  --color-status-failed: #ef4444;
-  --color-status-cancelled: #6b7280;
+  /* Surfaces: a near-black with blue in it, not neutral grey. Each step up
+     is roughly +4% lightness, which is enough to separate a panel from its
+     background without a border doing all the work. */
+  --color-bg: #070a0f;
+  --color-panel: #0d131b;
+  --color-panel-2: #131b25;
+  --color-panel-3: #1a2430;
+  --color-border: #1f2b38;
+  --color-border-strong: #2b3a4a;
+
+  --color-text: #e6edf3;
+  --color-text-dim: #8296ab;
+  --color-text-faint: #55697d;
+
+  --color-accent1: #24e1c0;
+  --color-accent2: #38bdf8;
+
+  --color-status-queued: #f0b429;
+  --color-status-running: #38bdf8;
+  --color-status-done: #34d399;
+  --color-status-failed: #f43f5e;
+  --color-status-cancelled: #64748b;
+
+  /* Waveform + meter ramp, low to hot. Used by the timeline and the mixer so
+     a loud channel and a loud waveform agree about what loud looks like. */
+  --color-wave-low: #1d7f9c;
+  --color-wave-mid: #38bdf8;
+  --color-wave-hot: #24e1c0;
 }
 
 html {
@@ -29,7 +64,28 @@ body {
   margin: 0;
   background: var(--color-bg);
   color: var(--color-text);
-  font: 15px/1.5 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+  font: 14px/1.55 'Inter', 'Segoe UI Variable', system-ui, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /*
+   * The backdrop the racks are mounted in.
+   *
+   * This used to be two big soft aqua radials in the top corners, which is
+   * the lighting of a product landing page - a glow implying the software is
+   * exciting. Hardware is not lit that way. A studio is lit from above, so
+   * the room falls off towards the bottom of the frame and the corners go
+   * dark, and that is all the first two layers do.
+   *
+   * The third is grain. Flat #070a0f on a modern panel reads as absence
+   * rather than as a surface, and it is what gives large dark web apps their
+   * plastic look; three percent of noise is below the threshold of being
+   * seen and above the threshold of being felt. It is one 200px SVG tile the
+   * compositor uploads once, not a per-frame cost.
+   */
+  background-image:
+    radial-gradient(1400px 900px at 50% -20%, rgba(150, 180, 205, 0.05), transparent 65%),
+    linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.35) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  background-attachment: fixed;
 }
 
 #app {
@@ -38,19 +94,363 @@ body {
   flex-direction: column;
 }
 
-/* Browsers default <button> to cursor: default (unlike <a>) and Tailwind's
-   Preflight deliberately leaves that as-is, so most of this app's ~100
-   buttons showed the arrow cursor instead of a hand unless individually
-   given cursor-pointer. Fix it once, globally, except while disabled. */
+/* Headings get tighter tracking than body text. At display sizes the default
+   spacing reads loose and web-ish; this is what makes a title look set rather
+   than typed. */
+h1, h2, h3 {
+  letter-spacing: -0.015em;
+}
+
+/* Tabular numbers everywhere a value changes in place - timecodes, meters,
+   percentages. Without this, digits of different widths make a counter jitter
+   sideways while it counts. */
+.tabular-nums,
+input[type='number'] {
+  font-variant-numeric: tabular-nums;
+}
+
 button:not(:disabled) {
   cursor: pointer;
 }
 
-.accent-gradient {
-  background-image: linear-gradient(135deg, var(--color-accent1), var(--color-accent2));
+/* Keyboard focus stays visible and on-brand. Removing outlines is how an app
+   becomes unusable without a mouse, so this replaces rather than removes. */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-accent1) 70%, transparent);
+  outline-offset: 2px;
+  border-radius: var(--radius, 2px);
 }
 
-/* Page fade transition */
+/* ─────────────────────────── surfaces ─────────────────────────── */
+
+/*
+ * Rack units, not cards.
+ *
+ * The previous surfaces were 14px-radius glass panels floating on a dark
+ * page, which is the house style of every browser-based music app and reads
+ * as exactly that. Hardware does not look like that. A rack unit has a hard
+ * edge, a face that catches light along its top lip and falls into shadow at
+ * the bottom, and a radius measured in one or two pixels because it was cut
+ * from a sheet of metal.
+ *
+ * Three things do most of the work here and all three are cheap:
+ *   - a 2px radius, so corners read as machined rather than rounded
+ *   - a vertical gradient on every face, so surfaces have a top and a bottom
+ *   - a hairline of white along the top edge and black along the bottom,
+ *     which is what "lit from above" looks like in two pixels
+ */
+:root {
+  --lip: rgba(255, 255, 255, 0.055);
+  --shade: rgba(0, 0, 0, 0.55);
+  --radius: 2px;
+}
+
+/* Glass survives only for things that genuinely float: modals and the
+   sidebar. A blurred backdrop behind a panel that never moves costs a
+   compositor layer and buys nothing. */
+.glass {
+  background: color-mix(in oklab, var(--color-panel) 80%, transparent);
+  backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
+  border: 1px solid var(--color-border-strong);
+}
+
+.glass-strong {
+  background: color-mix(in oklab, var(--color-panel) 94%, transparent);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid var(--color-border-strong);
+}
+
+.card {
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, var(--color-panel-2) 70%, transparent) 0%,
+      var(--color-panel) 42%,
+      color-mix(in oklab, #000 18%, var(--color-panel)) 100%);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  position: relative;
+  box-shadow:
+    inset 0 1px 0 0 var(--lip),
+    inset 0 -1px 0 0 var(--shade),
+    0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+/* The old ::before hairline is folded into the inset shadow above, so the
+   pseudo-element is free for something a panel actually needs. */
+.card::before { content: none; }
+
+.card-interactive {
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+/* No lift on hover. A rack unit does not rise off the rail when you look at
+   it, and the 2px translate was the single most web-like motion in the app. */
+.card-interactive:hover {
+  border-color: color-mix(in oklab, var(--color-accent1) 50%, var(--color-border));
+  box-shadow:
+    inset 0 1px 0 0 var(--lip),
+    0 0 0 1px color-mix(in oklab, var(--color-accent1) 22%, transparent),
+    0 2px 10px -4px rgba(0, 0, 0, 0.8);
+}
+
+/*
+ * A caption strip, as found across the top of every module in a rack.
+ * Brushed rather than flat: two stops and a hairline is enough to suggest
+ * anodised aluminium without a texture file.
+ */
+.rack-strip {
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, #fff 7%, var(--color-panel-3)) 0%,
+      var(--color-panel-2) 55%,
+      color-mix(in oklab, #000 22%, var(--color-panel-2)) 100%);
+  border-bottom: 1px solid #000;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
+}
+
+/* Engraved lettering: a dark glyph with a light shadow below it reads as
+   cut into the surface rather than printed on it. */
+.engraved {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.08);
+  letter-spacing: 0.1em;
+}
+
+/*
+ * Anything recessed into the face - a screen, a meter well, a scrolling
+ * list. The inverse of the panel: dark at the top where the lip shades it.
+ */
+.inset {
+  background: linear-gradient(180deg, #05080c 0%, #080d13 100%);
+  border: 1px solid #000;
+  border-radius: var(--radius);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.85),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.035);
+}
+
+/*
+ * A numeric readout. Tabular so digits do not shuffle, and lit rather than
+ * printed - the faint glow is what separates a value being *displayed* by
+ * the machine from a label somebody wrote on it.
+ */
+.readout {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: 0.02em;
+  color: var(--color-accent1);
+  text-shadow: 0 0 6px color-mix(in oklab, var(--color-accent1) 45%, transparent);
+}
+
+.readout-dim {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-dim);
+}
+
+/* A status LED, the way hardware indicates state: a lit dome, not a dot of
+   flat colour. The inset highlight is the reflection off the top of it. */
+.led {
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0.5px 0.5px rgba(255, 255, 255, 0.55),
+    0 0 5px 0 currentColor;
+}
+
+/* Hairline rules between controls, engraved rather than drawn: black line,
+   light line under it. */
+.divider-engraved {
+  border-top: 1px solid #000;
+  box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.045);
+}
+
+/* ─────────────────────────── controls ─────────────────────────── */
+
+/*
+ * Keys.
+ *
+ * Every button in the app was a flat rectangle that changed colour on hover,
+ * which is the single most web-like thing in a piece of music software. A
+ * key on a console is a moulded cap: it sits proud of the panel, it catches
+ * light on its top edge, and when you press it the whole cap goes down and
+ * into shadow. That last part matters more than the gradient - travel is
+ * what makes a control feel like it does something mechanical, and it is
+ * two pixels of translate.
+ *
+ * `.key` is the unlit cap. `.key-on` is the same cap with a lamp under it,
+ * which is how hardware shows a latched state: not a different colour of
+ * button, a button that is now lit. The lamp colour comes from
+ * `--key-accent`, so a caller sets one variable rather than restating a
+ * gradient.
+ */
+.key {
+  --key-accent: var(--color-accent1);
+  background: linear-gradient(180deg, var(--color-panel-3) 0%, var(--color-panel-2) 55%, #0a0f15 100%);
+  border: 1px solid #000;
+  border-radius: var(--radius);
+  color: var(--color-text-dim);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.075),
+    0 1px 0 0 rgba(255, 255, 255, 0.03),
+    0 2px 3px -1px rgba(0, 0, 0, 0.8);
+  transition: color 0.1s ease, box-shadow 0.1s ease, background 0.1s ease, transform 0.06s ease;
+}
+
+.key:hover:not(:disabled) {
+  color: var(--color-text);
+  background: linear-gradient(180deg, #212d3a 0%, var(--color-panel-3) 55%, #0c1218 100%);
+}
+
+/* Pressed. Down one pixel and the top highlight goes away, because the cap
+   is now below the surface it was sitting on. */
+.key:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.75),
+    0 0 0 0 rgba(0, 0, 0, 0);
+}
+
+.key:disabled {
+  opacity: 0.35;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+}
+
+/* Latched. The cap is tinted by the lamp under it and throws a little of
+   that light onto the panel around it - the outer shadow is the spill. */
+.key-on {
+  color: var(--key-accent);
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, var(--key-accent) 26%, var(--color-panel-3)) 0%,
+      color-mix(in oklab, var(--key-accent) 14%, var(--color-panel-2)) 60%,
+      color-mix(in oklab, var(--key-accent) 6%, #0a0f15) 100%);
+  border-color: color-mix(in oklab, var(--key-accent) 45%, #000);
+  text-shadow: 0 0 8px color-mix(in oklab, var(--key-accent) 55%, transparent);
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, var(--key-accent) 35%, transparent),
+    0 0 10px -2px color-mix(in oklab, var(--key-accent) 45%, transparent),
+    0 2px 3px -1px rgba(0, 0, 0, 0.8);
+}
+
+/*
+ * A well: the recess a display or a meter sits in. Darker than anything
+ * else on the panel, with the panel's own shadow falling into the top of
+ * it, which is what tells the eye it is below the surface rather than
+ * painted on it.
+ */
+.well {
+  background: linear-gradient(180deg, #02050a 0%, #050a10 55%, #070d14 100%);
+  border: 1px solid #000;
+  border-radius: var(--radius);
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.95),
+    0 1px 0 0 rgba(255, 255, 255, 0.045);
+}
+
+/*
+ * Meters.
+ *
+ * A smooth bar that grows is a progress indicator, and that is what every
+ * level meter in the app looked like. A meter on a desk is a column of
+ * discrete lamps, and the segmenting is not decoration - it is what lets
+ * you read a level at a glance instead of measuring a length. The eye
+ * counts lit segments far faster than it estimates a proportion.
+ *
+ * Done as an overlay of hairline gaps rather than as N elements, so the
+ * fill underneath stays one div and one width animation.
+ */
+.meter-well {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #02050a 0%, #060c12 100%);
+  border: 1px solid #000;
+  border-radius: 1px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.meter-well::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* 4px lamp, 1px gap. Below about 3px the gaps stop resolving and it just
+     looks like a dimmer bar, which is worse than no segmenting at all. */
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 4px,
+    rgba(0, 0, 0, 0.92) 4px 5px
+  );
+}
+
+/* The lit column. Its own glow, because a lamp spills onto the bezel. */
+.meter-fill {
+  height: 100%;
+  box-shadow: 0 0 6px -1px currentColor;
+}
+
+/* ─────────────────────────── accents ─────────────────────────── */
+
+/*
+ * The primary action.
+ *
+ * A 135-degree aqua-to-sky gradient is the call-to-action button of every
+ * SaaS landing page built since about 2019, and it was on the most
+ * important button on several screens. Hardware has an equivalent and it
+ * is not a gradient: it is the one key on the panel with a coloured cap,
+ * lit from underneath. Same job, same prominence, and it belongs to the
+ * same family as every other control instead of arriving from a different
+ * design language.
+ *
+ * Note the diagonal is gone. Light comes from above in this interface, so
+ * a highlight running corner to corner is the one thing on the panel lit
+ * from somewhere else.
+ */
+.accent-gradient {
+  background-image: linear-gradient(180deg,
+    color-mix(in oklab, #fff 22%, var(--color-accent1)) 0%,
+    var(--color-accent1) 45%,
+    color-mix(in oklab, #000 22%, var(--color-accent1)) 100%);
+  color: #04121a;
+  font-weight: 600;
+  border: 1px solid color-mix(in oklab, #000 45%, var(--color-accent1));
+  border-radius: var(--radius);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 0 12px -3px color-mix(in oklab, var(--color-accent1) 70%, transparent),
+    0 2px 4px -1px rgba(0, 0, 0, 0.85);
+  transition: transform 0.06s ease, box-shadow 0.1s ease;
+}
+
+.accent-gradient:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.45),
+    0 0 8px -3px color-mix(in oklab, var(--color-accent1) 60%, transparent);
+}
+
+.accent-text {
+  background-image: linear-gradient(120deg, var(--color-accent1), var(--color-accent2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* A thin luminous rule, for section dividers that should feel like a signal
+   rather than a border. */
+.accent-rule {
+  height: 1px;
+  background: linear-gradient(90deg,
+    color-mix(in oklab, var(--color-accent1) 60%, transparent),
+    transparent 70%);
+}
+
+/* ─────────────────────────── motion ─────────────────────────── */
+
+/*
+ * Every animation here is under 250ms. Anything slower is a workstation
+ * making the user wait for a decoration, and in a tool people use all day
+ * that stops being delightful by the third time.
+ */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.15s ease;
@@ -60,7 +460,6 @@ button:not(:disabled) {
   opacity: 0;
 }
 
-/* Collapsible slide transition */
 .slide-enter-active,
 .slide-leave-active {
   transition: max-height 0.2s ease, opacity 0.2s ease;
@@ -72,4 +471,148 @@ button:not(:disabled) {
   max-height: 0;
   opacity: 0;
   overflow: hidden;
+}
+
+/* The slow pulse behind anything actively generating. Deliberately gentle:
+   a job can run for twenty minutes, and a busy indicator that flashes for
+   that long is a reason to close the app. */
+@keyframes breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.breathe {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+/* Honour the system setting rather than overriding it. Someone who turned
+   animations off has a reason, often a medical one. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─────────────────────────── scrollbars ─────────────────────────── */
+
+/* The default Windows scrollbar is a bright grey slab that breaks the dark
+   surface wherever a panel overflows. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+/* A moulded grip in a cut channel, matching the faders: the pill was the
+   one remaining fully-round shape on a panel of 2px corners. */
+*::-webkit-scrollbar-track {
+  background: linear-gradient(90deg, transparent 0 3px, #03070c 3px 7px, transparent 7px);
+}
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #36455a 0%, #1d2836 55%, #0d131b 100%);
+  border-radius: 1px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--color-accent1) 40%, var(--color-border-strong));
+  background-clip: content-box;
+}
+
+/* Range inputs carry most of this app's parameter editing - plugin values,
+   mixer faders, generation settings - and the browser default is a grey
+   groove that looks nothing like the rest of the surface. */
+/*
+ * Faders, not sliders.
+ *
+ * The round aqua dot on a pill track is the HTML range input with a coat of
+ * paint, and it is what every volume control in the app was. A desk fader
+ * is two things the dot is not: the travel is a slot cut into the panel,
+ * and the handle is a moulded cap wide enough to get a finger on, with an
+ * index line across it so you can read the position without looking at a
+ * number.
+ *
+ * The cap is deliberately wider than it is tall. That ratio is the whole
+ * reason a fader reads as a fader rather than as a knob on a rail.
+ */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 1px;
+  /* The slot. Dark, with the light catching the lower edge, which is what a
+     groove cut into a lit surface looks like. */
+  background: linear-gradient(180deg, #02050a 0%, #070d14 100%);
+  border: 1px solid #000;
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.9),
+    0 1px 0 rgba(255, 255, 255, 0.05);
+  outline: none;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 18px;
+  border-radius: 2px;
+  /* The cap, lit from above like everything else, with its own shadow cast
+     down onto the panel. The middle stop is the moulding line. */
+  background: linear-gradient(180deg,
+    #46566b 0%, #2c3947 45%,
+    #0b1117 46%, #0b1117 54%,
+    #263140 55%, #131b25 100%);
+  border: 1px solid #000;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 2px 4px -1px rgba(0, 0, 0, 0.9);
+  transition: box-shadow 0.1s ease;
+}
+
+/* Grabbing it lights the index line. This is the only feedback a fader
+   needs, and it costs nothing next to scaling the whole cap up 15%, which
+   made the control jump under the cursor. */
+input[type='range']:hover::-webkit-slider-thumb,
+input[type='range']:active::-webkit-slider-thumb {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 0 7px -1px color-mix(in oklab, var(--color-accent1) 70%, transparent),
+    0 2px 4px -1px rgba(0, 0, 0, 0.9);
+}
+
+input[type='range']:disabled::-webkit-slider-thumb {
+  background: linear-gradient(180deg, #202832 0%, #121820 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+
+/*
+ * Tailwind's radius scale, retuned.
+ *
+ * Every `rounded-lg` in the app was 8px and every `rounded-xl` 12px, which
+ * is the single biggest reason the product read as a web app rather than a
+ * tool. Rather than edit a hundred components, the scale itself is brought
+ * down to what a machined panel looks like. Full-round (`rounded-full`) is
+ * untouched, because a knob is genuinely a circle.
+ */
+.rounded { border-radius: 2px; }
+.rounded-md { border-radius: 2px; }
+.rounded-lg { border-radius: 3px; }
+.rounded-xl { border-radius: 3px; }
+.rounded-2xl { border-radius: 4px; }
+.rounded-t { border-radius: 2px 2px 0 0; }
+.rounded-b { border-radius: 0 0 2px 2px; }
+.rounded-l { border-radius: 2px 0 0 2px; }
+.rounded-r { border-radius: 0 2px 2px 0; }
+
+/*
+ * Denser by default. A DAW puts as much on screen as it can read, and the
+ * base 14px/1.5 of a content site wastes a third of a 1080p panel.
+ */
+body {
+  font-size: 13px;
+  line-height: 1.45;
 }

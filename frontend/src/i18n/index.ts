@@ -3,7 +3,7 @@ import ru from '../locales/ru'
 import en from '../locales/en'
 
 export type LocaleCode = 'ru' | 'en'
-const STORAGE_KEY = 'remiqora_locale'
+const STORAGE_KEY = 'cashout_studio_locale'
 
 function detectInitialLocale(): LocaleCode {
   try {
@@ -12,13 +12,13 @@ function detectInitialLocale(): LocaleCode {
   } catch {
     // localStorage unavailable (private browsing) - fall through to default.
   }
-  return 'ru'
+  return 'en'
 }
 
 export const i18n = createI18n({
   legacy: false,
   locale: detectInitialLocale(),
-  fallbackLocale: 'ru',
+  fallbackLocale: 'en',
   messages: { ru, en },
 })
 

@@ -55,13 +55,9 @@ async function onSelect(id: ModelId) {
   <header class="sticky top-0 z-40 border-b border-border bg-bg/90 backdrop-blur">
     <div class="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-4 px-4 py-3 sm:px-6">
       <router-link to="/" class="flex items-center gap-2 text-text">
-        <span class="accent-gradient flex h-6 w-6 shrink-0 items-center justify-center rounded-md">
-          <svg viewBox="0 0 32 32" width="16" height="16" aria-hidden="true">
-            <text x="16" y="23" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="21" fill="white">R</text>
-          </svg>
-        </span>
+        <img src="/cashout-studio-logo.svg" alt="" class="h-7 w-7 shrink-0 rounded-md" />
         <span class="flex flex-col leading-tight">
-          <span class="text-lg font-semibold">Remiqora</span>
+          <span class="text-lg font-semibold">Cashout Studio</span>
           <span class="text-[10px] text-text-dim">{{ t('header.tagline') }}</span>
         </span>
       </router-link>
@@ -74,13 +70,37 @@ async function onSelect(id: ModelId) {
         >
           {{ t('header.editor') }}
         </router-link>
+        <!-- Both of these are shown even when their engine is stopped: each
+             page renders an offline banner with a start button, and hiding
+             the tabs entirely made two whole features invisible until you
+             happened to have the right model running. -->
         <router-link
-          v-if="statusOf('ace_step') === 'running'"
+          to="/stable-audio"
+          class="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+          :class="route.path.startsWith('/stable-audio') ? 'border-accent1/60 bg-panel text-text' : 'border-border bg-panel-2 text-text-dim hover:text-text'"
+        >
+          {{ t('header.beats') }}
+        </router-link>
+        <router-link
           to="/ace-step/lora"
           class="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
           :class="route.path.startsWith('/ace-step/lora') ? 'border-accent1/60 bg-panel text-text' : 'border-border bg-panel-2 text-text-dim hover:text-text'"
         >
           {{ t('header.lora') }}
+        </router-link>
+        <router-link
+          to="/voices"
+          class="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+          :class="route.path.startsWith('/voices') ? 'border-accent1/60 bg-panel text-text' : 'border-border bg-panel-2 text-text-dim hover:text-text'"
+        >
+          {{ t('header.voices') }}
+        </router-link>
+        <router-link
+          to="/separation"
+          class="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+          :class="route.path.startsWith('/separation') ? 'border-accent1/60 bg-panel text-text' : 'border-border bg-panel-2 text-text-dim hover:text-text'"
+        >
+          {{ t('header.separation') }}
         </router-link>
         <button
           v-for="id in MODEL_IDS"

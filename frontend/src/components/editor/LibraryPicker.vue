@@ -105,7 +105,7 @@ async function onFileSelected(event: Event) {
                 :key="name"
                 type="button"
                 class="rounded border border-border px-2 py-1 text-[11px] text-text"
-                @click="pick(trk.stems![name], `${trk.title || t('library.trackFallback')} — ${STEM_LABELS[name] || name}`)"
+                @click="pick(trk.stems![name], `${trk.title || t('library.trackFallback')} · ${STEM_LABELS[name] || name}`)"
               >
                 {{ STEM_LABELS[name] || name }}
               </button>

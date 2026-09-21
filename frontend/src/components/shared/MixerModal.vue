@@ -224,7 +224,7 @@ async function openInEditor(): Promise<void> {
       const clip: Clip = {
         id: crypto.randomUUID(),
         sourceUrl: props.stemUrls[name],
-        sourceLabel: `${props.title} — ${STEM_LABELS.value[name]}`,
+        sourceLabel: `${props.title} · ${STEM_LABELS.value[name]}`,
         timelineStart: 0,
         trimStart: 0,
         trimEnd: buffers![name].duration,

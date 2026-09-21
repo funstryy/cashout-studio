@@ -1,5 +1,5 @@
 export type ModelId = 'ace_step' | 'yue2'
-export type TrackOrigin = ModelId | 'editor' | 'upload'
+export type TrackOrigin = ModelId | 'editor' | 'upload' | 'voices' | 'stable_audio' | 'plugins' | 'treblo'
 
 export type ModelRuntimeStatus = 'stopped' | 'starting' | 'running' | 'stopping' | 'error'
 

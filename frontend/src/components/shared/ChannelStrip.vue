@@ -66,95 +66,120 @@ const effectsExpanded = ref(false)
 </script>
 
 <template>
-  <div class="space-y-2 rounded-lg border border-border bg-panel-2 p-2.5">
+  <!-- A channel strip, built the way one is: engraved legends, a segmented
+       meter, and keys for the latching controls. It was a stack of labelled
+       form rows, which is the same information and none of the reading
+       speed - on a desk you find mute by its position and its lamp, not by
+       reading the word. -->
+  <div class="card space-y-2 p-2.5">
     <div class="flex items-center justify-between">
-      <p class="text-xs font-medium text-text">{{ label }}</p>
-      <div class="flex items-center gap-1.5">
+      <p class="engraved truncate text-[10px] font-semibold uppercase text-text">{{ label }}</p>
+      <div class="flex items-center gap-1">
         <template v-if="showPanMuteSolo">
           <button
             type="button"
-            class="rounded px-1.5 py-0.5 text-[10px] font-medium"
-            :class="muted ? 'bg-status-failed text-white' : 'bg-panel text-text-dim'"
+            class="key px-1.5 py-0.5 text-[10px] font-semibold"
+            :class="muted ? 'key-on' : ''"
+            style="--key-accent: var(--color-status-failed)"
             @click="muted = !muted"
           >
             M
           </button>
           <button
             type="button"
-            class="rounded px-1.5 py-0.5 text-[10px] font-medium"
-            :class="solo ? 'accent-gradient text-white' : 'bg-panel text-text-dim'"
+            class="key px-1.5 py-0.5 text-[10px] font-semibold"
+            :class="solo ? 'key-on' : ''"
+            style="--key-accent: var(--color-status-queued)"
             @click="solo = !solo"
           >
             S
           </button>
         </template>
-        <button type="button" class="text-[10px] text-text-dim hover:underline" @click="emit('reset')">{{ t('common.reset') }}</button>
+        <button
+          type="button"
+          class="key px-1.5 py-0.5 text-[10px]"
+          @click="emit('reset')"
+        >{{ t('common.reset') }}</button>
       </div>
     </div>
 
     <div class="space-y-1">
-      <div class="flex items-center justify-between text-[10px] text-text-dim">
-        <span>{{ t('channelStrip.volume', { value: Math.round(volume * 100) }) }}</span>
+      <div class="flex items-center justify-between text-[10px]">
+        <span class="readout-dim">{{ t('channelStrip.volume', { value: Math.round(volume * 100) }) }}</span>
+        <!-- Clip is a lamp that latches your attention, so it is the one
+             thing on the strip allowed to be fully saturated. -->
         <span
           v-if="clipping"
-          class="rounded bg-status-failed px-1 py-0.2 text-[9px] font-bold text-white uppercase tracking-wider animate-pulse"
+          class="animate-pulse rounded-[1px] bg-status-failed px-1 text-[9px] font-bold uppercase tracking-wider text-white"
+          style="box-shadow: 0 0 8px var(--color-status-failed)"
         >
           CLIP
         </span>
       </div>
       <input v-model.number="volume" type="range" min="0" max="1.5" step="0.01" class="w-full accent-current" />
-      <div class="h-1.5 w-full overflow-hidden rounded-full bg-panel">
+      <div class="meter-well h-2 w-full">
         <div
-          class="h-full transition-all duration-75 ease-out"
-          :class="clipping ? 'bg-status-failed' : (level ?? 0) > 0.85 ? 'bg-amber-400' : 'bg-accent'"
-          :style="{ width: `${Math.min(100, Math.round((level ?? 0) * 100))}%` }"
+          class="meter-fill transition-all duration-75 ease-out"
+          :style="{
+            width: `${Math.min(100, Math.round((level ?? 0) * 100))}%`,
+            background: clipping
+              ? 'var(--color-status-failed)'
+              : (level ?? 0) > 0.85
+                ? 'var(--color-status-queued)'
+                : 'var(--color-accent1)',
+            color: clipping
+              ? 'var(--color-status-failed)'
+              : (level ?? 0) > 0.85
+                ? 'var(--color-status-queued)'
+                : 'var(--color-accent1)',
+          }"
         />
       </div>
     </div>
 
-    <label v-if="showPanMuteSolo" class="block text-[10px] text-text-dim">
+    <label v-if="showPanMuteSolo" class="readout-dim block text-[10px]">
       {{ t('channelStrip.pan', { value: pan.toFixed(2) }) }}
       <input v-model.number="pan" type="range" min="-1" max="1" step="0.01" class="w-full accent-current" />
     </label>
 
     <button
       type="button"
-      class="flex w-full items-center justify-between text-[10px] text-text-dim hover:text-text"
+      class="divider-engraved flex w-full items-center justify-between pt-1.5 text-[10px] text-text-dim hover:text-text"
       @click="effectsExpanded = !effectsExpanded"
     >
-      <span>{{ t('channelStrip.effects') }}</span>
+      <span class="engraved uppercase">{{ t('channelStrip.effects') }}</span>
       <span aria-hidden="true">{{ effectsExpanded ? '▾' : '▸' }}</span>
     </button>
 
     <Transition name="slide">
       <div v-if="effectsExpanded" class="space-y-2">
         <div class="grid grid-cols-3 gap-1.5">
-          <label class="block text-[10px] text-text-dim">
+          <label class="readout-dim block text-[10px]">
             {{ t('channelStrip.low', { value: eqLow.toFixed(1) }) }}
             <input v-model.number="eqLow" type="range" min="-12" max="12" step="0.5" class="w-full accent-current" />
           </label>
-          <label class="block text-[10px] text-text-dim">
+          <label class="readout-dim block text-[10px]">
             {{ t('channelStrip.mid', { value: eqMid.toFixed(1) }) }}
             <input v-model.number="eqMid" type="range" min="-12" max="12" step="0.5" class="w-full accent-current" />
           </label>
-          <label class="block text-[10px] text-text-dim">
+          <label class="readout-dim block text-[10px]">
             {{ t('channelStrip.high', { value: eqHigh.toFixed(1) }) }}
             <input v-model.number="eqHigh" type="range" min="-12" max="12" step="0.5" class="w-full accent-current" />
           </label>
         </div>
 
         <div class="grid grid-cols-2 gap-1.5">
-          <label class="block text-[10px] text-text-dim">
+          <label class="readout-dim block text-[10px]">
             {{ t('channelStrip.compThreshold', { value: compThreshold.toFixed(0) }) }}
             <input v-model.number="compThreshold" type="range" min="-60" max="0" step="1" class="w-full accent-current" />
           </label>
-          <label class="block text-[10px] text-text-dim">
+          <label class="readout-dim block text-[10px]">
             {{ t('channelStrip.compRatio', { value: compRatio.toFixed(1) }) }}
             <input v-model.number="compRatio" type="range" min="1" max="20" step="0.5" class="w-full accent-current" />
           </label>
         </div>
 
-        <label class="block text-[10px] text-text-dim">
+        <label class="readout-dim block text-[10px]">
           {{ t('channelStrip.reverb', { value: Math.round(reverbMix * 100) }) }}
           <input v-model.number="reverbMix" type="range" min="0" max="1" step="0.01" class="w-full accent-current" />
         </label>

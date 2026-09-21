@@ -152,6 +152,92 @@ export const useEditorStore = defineStore('editor', {
         }
       }
     },
+    /**
+     * Cuts a clip in two at a point on the timeline.
+     *
+     * Both halves keep pointing at the same source audio and simply take
+     * different trim windows - no audio is copied or re-encoded, which is
+     * why this is instant and why splitting a clip fifty times costs
+     * nothing. Splitting is the single most-used edit in an arrangement and
+     * it has to feel free.
+     */
+    splitClip(clipId: string, atSec: number) {
+      for (const lane of this.project.lanes) {
+        const index = lane.clips.findIndex((c) => c.id === clipId)
+        if (index === -1) continue
+        const clip = lane.clips[index]
+        const offset = atSec - clip.timelineStart
+        const length = clip.trimEnd - clip.trimStart
+        // A cut at or outside an edge would leave a zero-length clip, which
+        // cannot be seen, grabbed or deleted afterwards.
+        if (offset <= 0.001 || offset >= length - 0.001) return false
+
+        const right: Clip = {
+          id: crypto.randomUUID(),
+          sourceUrl: clip.sourceUrl,
+          sourceLabel: clip.sourceLabel,
+          timelineStart: atSec,
+          trimStart: clip.trimStart + offset,
+          trimEnd: clip.trimEnd,
+        }
+        clip.trimEnd = clip.trimStart + offset
+        lane.clips.splice(index + 1, 0, right)
+        this.snapshot()
+        return true
+      }
+      return false
+    },
+
+    /** A copy directly after the original, which is what "duplicate" means
+     *  in an arrangement - not a copy on top of it. */
+    duplicateClip(clipId: string) {
+      for (const lane of this.project.lanes) {
+        const clip = lane.clips.find((c) => c.id === clipId)
+        if (!clip) continue
+        const length = clip.trimEnd - clip.trimStart
+        const copy: Clip = {
+          id: crypto.randomUUID(),
+          sourceUrl: clip.sourceUrl,
+          sourceLabel: clip.sourceLabel,
+          timelineStart: clip.timelineStart + length,
+          trimStart: clip.trimStart,
+          trimEnd: clip.trimEnd,
+        }
+        lane.clips.push(copy)
+        this.selectedClipId = copy.id
+        this.snapshot()
+        return copy.id
+      }
+      return null
+    },
+
+    /** Which lane a clip is on - the split and paste paths both need it and
+     *  neither should be walking the project itself. */
+    findClip(clipId: string): { lane: TimelineLane; clip: Clip } | null {
+      for (const lane of this.project.lanes) {
+        const clip = lane.clips.find((c) => c.id === clipId)
+        if (clip) return { lane, clip }
+      }
+      return null
+    },
+
+    pasteClip(source: Clip, laneId: string, atSec: number) {
+      const lane = this.project.lanes.find((l) => l.id === laneId)
+      if (!lane) return null
+      const copy: Clip = {
+        id: crypto.randomUUID(),
+        sourceUrl: source.sourceUrl,
+        sourceLabel: source.sourceLabel,
+        timelineStart: Math.max(0, atSec),
+        trimStart: source.trimStart,
+        trimEnd: source.trimEnd,
+      }
+      lane.clips.push(copy)
+      this.selectedClipId = copy.id
+      this.snapshot()
+      return copy.id
+    },
+
     updateClip(clipId: string, patch: Partial<Clip>, commit = false) {
       for (const lane of this.project.lanes) {
         const clip = lane.clips.find((c) => c.id === clipId)

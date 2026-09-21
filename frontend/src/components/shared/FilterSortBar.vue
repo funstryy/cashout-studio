@@ -58,7 +58,7 @@ const PRESETS: { value: DatePreset; labelKey: string }[] = [
         class="rounded-md border border-border bg-panel-2 px-1.5 py-1 text-text"
         @change="emit('update:dateFrom', ($event.target as HTMLInputElement).value)"
       />
-      <span class="text-text-dim">—</span>
+      <span class="text-text-dim">–</span>
       <input
         type="date"
         :value="dateTo"
