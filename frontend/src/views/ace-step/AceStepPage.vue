@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import PageFrame from '../../components/shared/PageFrame.vue'
 import { useOrchestratorStore } from '../../stores/orchestrator'
 import { useAceStepStore } from '../../stores/aceStep'
 import * as trainingApi from '../../api/aceStepTraining'
@@ -55,7 +56,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <PageFrame :title="t('nav.generate')" accent="var(--color-accent2)">
+
     <ModelOfflineBanner v-if="!isRunning" model-id="ace_step" :status="modelStatus" :error="modelError" />
     <div v-else-if="isTraining" class="rounded-xl border border-status-queued/40 bg-status-queued/10 p-6 text-center text-sm text-text-dim">
       {{ t('acePage.trainingActive') }}
@@ -65,5 +67,5 @@ onUnmounted(() => {
       <GenerateForm v-if="isRunning && !isTraining" />
       <ResultsFeed :class="{ 'lg:col-span-2': !isRunning || isTraining }" />
     </div>
-  </div>
+  </PageFrame>
 </template>

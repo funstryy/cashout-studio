@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import PageFrame from '../../components/shared/PageFrame.vue'
 import { useOrchestratorStore } from '../../stores/orchestrator'
 import { useLoraTrainingStore } from '../../stores/loraTraining'
 import { useLoraRegistry } from '../../composables/useLoraRegistry'
 import { formatDuration } from '../../composables/formatDuration'
 import { uploadDatasetFiles } from '../../api/loraDataset'
+import { getDownloads, type DownloadProgress } from '../../api/orchestrator'
 import * as aceStepApi from '../../api/aceStep'
 import ModelOfflineBanner from '../../components/shared/ModelOfflineBanner.vue'
 import ProgressBar from '../../components/shared/ProgressBar.vue'
 import CollapsibleDetails from '../../components/shared/CollapsibleDetails.vue'
+import SpotifyDataset from '../../components/lora/SpotifyDataset.vue'
 import HelpModal from '../../components/shared/HelpModal.vue'
 import type { DatasetSample } from '../../api/aceStepTraining'
 
@@ -19,6 +22,13 @@ const { add: addLora } = useLoraRegistry()
 const { t, tm } = useI18n()
 
 const helpOpen = ref<'dataset' | 'training' | null>(null)
+
+/** Spotify hands its finished dataset straight to the fields below, so the
+ *  usual scan/label/train path continues from there unchanged. */
+function onSpotifyDataset(payload: { audioDir: string; datasetName: string }) {
+  audioDir.value = payload.audioDir
+  datasetName.value = payload.datasetName
+}
 
 const modelStatus = computed(() => orchestrator.statuses.ace_step?.status ?? 'stopped')
 const modelError = computed(() => orchestrator.statuses.ace_step?.error ?? null)
@@ -49,9 +59,29 @@ async function checkModelReady() {
   }
 }
 
+// First initialization pulls ~10 GB of checkpoints, which the engine only
+// reports as progress bars on its own stdout. Polling them back out is the
+// difference between "downloading, 17 minutes left" and a spinner that looks
+// identical to a hang.
+const downloads = ref<DownloadProgress[]>([])
+let downloadTimer: number | undefined
+
+async function pollDownloads() {
+  window.clearTimeout(downloadTimer)
+  try {
+    downloads.value = await getDownloads('ace_step')
+  } catch {
+    downloads.value = []
+  }
+  if (initializing.value) {
+    downloadTimer = window.setTimeout(pollDownloads, 3000)
+  }
+}
+
 async function onInitModel() {
   initializing.value = true
   initError.value = ''
+  void pollDownloads()
   try {
     await aceStepApi.initModel(true)
     await checkModelReady()
@@ -59,6 +89,8 @@ async function onInitModel() {
     initError.value = err instanceof Error ? err.message : String(err)
   } finally {
     initializing.value = false
+    window.clearTimeout(downloadTimer)
+    downloads.value = []
   }
 }
 
@@ -103,7 +135,7 @@ async function onLoadDataset() {
 }
 
 // Bulk browser upload: ACE-Step's own dataset API only scans a server-local
-// folder path, so files picked/dropped here first go to Remiqora's own
+// folder path, so files picked/dropped here first go to Cashout Studio's own
 // backend, which drops them under ACE_STEP_DIR/datasets/<name>/ (a location
 // the scan endpoint is already allowed to read) and hands back that path.
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -259,7 +291,7 @@ const epochProgress = computed(() => {
 })
 const etaLabel = computed(() => {
   const sec = store.training?.estimated_time_remaining
-  if (!sec || !Number.isFinite(sec)) return '—'
+  if (!sec || !Number.isFinite(sec)) return '-'
   const m = Math.round(sec / 60)
   return m < 1 ? t('lora.etaLessThanMin') : t('lora.etaMin', { value: m })
 })
@@ -275,10 +307,20 @@ async function onExport() {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <PageFrame :title="t('nav.lora')" accent="var(--color-status-queued)">
+
     <ModelOfflineBanner v-if="!isRunning" model-id="ace_step" :status="modelStatus" :error="modelError" />
 
-    <template v-else>
+    <!-- Outside the offline gate on purpose. Linking Spotify, matching files
+         and writing captions are all file operations - none of them needs
+         ACE-Step loaded, and making someone start a multi-gigabyte model just
+         to connect an account would be gating cheap work on expensive work.
+         It fills the dataset fields below, which do need the model. -->
+    <SpotifyDataset @dataset="onSpotifyDataset" />
+
+    <!-- v-if rather than v-else: the Spotify panel sits between this and the
+         banner above, and v-else only binds to an immediate sibling. -->
+    <template v-if="isRunning">
       <div class="rounded-xl border border-status-queued/40 bg-status-queued/10 p-4 text-sm text-text-dim">
         <i18n-t keypath="lora.serverNotice" tag="span">
           <template #example><code class="rounded bg-panel-2 px-1">datasets/...</code></template>
@@ -286,9 +328,20 @@ async function onExport() {
       </div>
 
       <div v-if="llmReady === false" class="flex flex-wrap items-center gap-3 rounded-xl border border-status-failed/40 bg-status-failed/10 p-4 text-sm text-text-dim">
-        <span class="flex-1">
-          {{ t('lora.llmNotReady') }}
-        </span>
+        <div class="flex-1 space-y-2">
+          <p>{{ t('lora.llmNotReady') }}</p>
+          <div v-if="downloads.length" class="space-y-1">
+            <p class="text-xs text-text">{{ t('lora.downloading') }}</p>
+            <div v-for="dl in downloads" :key="`${dl.file}:${dl.total}`" class="space-y-0.5">
+              <div class="flex justify-between text-[11px]">
+                <span>{{ dl.file }} · {{ dl.downloaded }} / {{ dl.total }}</span>
+                <span>{{ t('lora.etaLeft', { eta: dl.eta, rate: dl.rate }) }}</span>
+              </div>
+              <ProgressBar :value="dl.percent" />
+            </div>
+            <p class="text-[11px]">{{ t('lora.downloadResumes') }}</p>
+          </div>
+        </div>
         <button
           type="button"
           class="accent-gradient inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
@@ -391,9 +444,9 @@ async function onExport() {
           </button>
           <div v-if="store.autoLabelRunning || store.autoLabelTotal" class="space-y-2">
             <ProgressBar :value="store.autoLabelTotal ? (store.autoLabelCurrent / store.autoLabelTotal) * 100 : 0" />
-            <p class="text-xs text-text-dim">{{ store.autoLabelCurrent }} / {{ store.autoLabelTotal }} — {{ store.autoLabelProgressMsg }}</p>
+            <p class="text-xs text-text-dim">{{ store.autoLabelCurrent }} / {{ store.autoLabelTotal }}: {{ store.autoLabelProgressMsg }}</p>
             <p v-if="store.autoLabelLastSample" class="text-xs text-text-dim">
-              {{ t('lora.lastLabeled', { filename: store.autoLabelLastSample.filename, caption: store.autoLabelLastSample.caption || '—' }) }}
+              {{ t('lora.lastLabeled', { filename: store.autoLabelLastSample.filename, caption: store.autoLabelLastSample.caption || '-' }) }}
             </p>
           </div>
           <p v-if="store.autoLabelError" class="text-xs text-status-failed">{{ store.autoLabelError }}</p>
@@ -421,7 +474,7 @@ async function onExport() {
                 <tr v-for="s in store.samples" :key="s.index" class="border-t border-border/60 align-top">
                   <td class="p-2 text-text-dim">{{ s.filename }}</td>
                   <td class="p-2 text-text-dim">{{ formatDuration(s.duration) }}</td>
-                  <td class="p-2">{{ s.labeled ? '✓' : '—' }}</td>
+                  <td class="p-2">{{ s.labeled ? '✓' : '-' }}</td>
                   <td class="p-2"><input v-model="edited(s).caption" type="text" class="w-48 rounded border border-border bg-panel-2 p-1 text-text" /></td>
                   <td class="p-2"><input v-model="edited(s).genre" type="text" class="w-28 rounded border border-border bg-panel-2 p-1 text-text" /></td>
                   <td class="p-2"><input v-model.number="edited(s).bpm" type="number" class="w-16 rounded border border-border bg-panel-2 p-1 text-text" /></td>
@@ -487,6 +540,10 @@ async function onExport() {
             </label>
           </div>
 
+          <p class="mt-3 rounded-lg border border-border bg-panel-2 p-3 text-xs text-text-dim">
+            {{ t('lora.cpuWarning') }}
+          </p>
+
           <CollapsibleDetails :summary="t('lora.advancedParams')">
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <label class="space-y-1"><span class="text-xs text-text-dim">{{ t('lora.loraRank') }}</span><input v-model.number="loraRank" type="number" min="1" max="256" class="w-full rounded-lg border border-border bg-panel-2 p-1.5 text-sm text-text" /></label>
@@ -528,7 +585,7 @@ async function onExport() {
                 epoch: store.training.current_epoch,
                 total: store.totalEpochs ? ` / ${store.totalEpochs}` : '',
                 step: store.training.current_step,
-                loss: store.training.current_loss != null ? store.training.current_loss.toFixed(4) : '—',
+                loss: store.training.current_loss != null ? store.training.current_loss.toFixed(4) : '-',
                 eta: etaLabel,
               }) }}
             </p>
@@ -594,5 +651,5 @@ async function onExport() {
       </table>
       <p class="text-xs text-text-dim">{{ t('lora.help.training.footer') }}</p>
     </HelpModal>
-  </div>
+  </PageFrame>
 </template>

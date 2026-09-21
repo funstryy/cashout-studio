@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAceStepStore } from '../../stores/aceStep'
 import * as api from '../../api/aceStep'
@@ -101,7 +101,10 @@ function deletePreset(name: string) {
   if (selectedPresetName.value === name) selectedPresetName.value = ''
 }
 
-onMounted(loadPresets)
+onMounted(() => {
+  loadPresets()
+  void syncLoraFromEngine()
+})
 
 watch(
   () => store.pendingParamsInsert,
@@ -138,6 +141,7 @@ const customPrompt = ref('')
 const instrumental = ref(false)
 const customLyrics = ref('')
 
+const letAiWrite = ref(false)
 const useRefAudio = ref(false)
 const refAudioFile = ref<File | null>(null)
 const taskType = ref<TaskType>('cover')
@@ -162,6 +166,11 @@ const seedValue = ref<number | null>(null)
 const selectedModel = ref('')
 
 const selectedLoraPath = ref('')
+/** An adapter the engine has loaded that this page did not load. */
+const strayLora = ref<string | null>(null)
+/** Guards the watcher below, so reflecting the engine's state does not get
+ *  mistaken for the user choosing something and reload the adapter. */
+let syncingLora = false
 const loraScaleVal = ref(1)
 const loraStatus = ref('')
 const newLoraName = ref('')
@@ -247,6 +256,9 @@ watch(
   () => store.inventory,
   (inv) => {
     if (inv && !selectedModel.value) selectedModel.value = inv.default_model
+    // The inventory arriving means the engine answered, which is the first
+    // moment it can be asked what adapter it is holding.
+    if (inv) void syncLoraFromEngine()
   },
   { immediate: true },
 )
@@ -267,8 +279,13 @@ watch(supportedTaskTypes, (set) => {
 // exporting a checkpoint via the LoRA training page copies that checkpoint dir as-is, so
 // the actual PEFT adapter path can end up one level deeper than the registered path.
 // Probe both nestings rather than requiring the registry entry to be exactly right.
+// A run started outside the export flow registers its output folder, where the
+// adapter sits under "final/adapter" - so probe that too, and say what was
+// tried when none of them exist rather than reporting only the last guess,
+// which is the least likely path of the set.
 async function loadLoraWithFallback(path: string, name?: string) {
-  const candidates = [path, `${path}/adapter`, `${path}/adapter/adapter`]
+  const base = path.replace(/[\\/]+$/, '')
+  const candidates = [base, `${base}/adapter`, `${base}/final/adapter`, `${base}/adapter/adapter`]
   let lastErr: unknown
   for (const candidate of candidates) {
     try {
@@ -278,11 +295,63 @@ async function loadLoraWithFallback(path: string, name?: string) {
       lastErr = err
     }
   }
-  throw lastErr
+  throw new Error(
+    `${lastErr instanceof Error ? lastErr.message : String(lastErr)}\nTried: ${candidates.join(', ')}`,
+  )
+}
+
+/**
+ * Reflects whatever the engine already has loaded.
+ *
+ * Called whenever ACE-Step comes up, because a LoRA loaded in an earlier
+ * session is still loaded now: the adapter lives in that process and nothing
+ * here unloads it. A page that assumed "no adapter selected" meant "no
+ * adapter active" was the difference between a Flint-rap LoRA quietly
+ * colouring every generation and being able to see it.
+ */
+async function syncLoraFromEngine(): Promise<void> {
+  try {
+    const status = await api.loraStatus()
+    if (!status || !status.lora_loaded || !status.use_lora) {
+      strayLora.value = null
+      return
+    }
+    syncingLora = true
+    loraScaleVal.value = status.lora_scale ?? 1
+    const active = status.active_adapter ?? status.adapters[0] ?? null
+    const known = loras.value.find((l) => l.name === active)
+    if (known) {
+      selectedLoraPath.value = known.path
+      strayLora.value = null
+    } else {
+      // Loaded, but not from this browser's registry - name it rather than
+      // pretend nothing is on.
+      strayLora.value = active ?? 'unknown adapter'
+    }
+    await nextTick()
+    syncingLora = false
+  } catch {
+    // The engine is not up, or is too old to report - nothing to reflect.
+  }
+}
+
+async function unloadStrayLora(): Promise<void> {
+  try {
+    await api.loraUnload()
+    strayLora.value = null
+    syncingLora = true
+    selectedLoraPath.value = ''
+    await nextTick()
+    syncingLora = false
+  } catch (err) {
+    loraStatus.value = err instanceof Error ? err.message : String(err)
+  }
 }
 
 let loraDebounce: ReturnType<typeof setTimeout> | null = null
 watch(selectedLoraPath, async (path) => {
+  if (syncingLora) return
+  strayLora.value = null
   loraStatus.value = ''
   try {
     if (!path) {
@@ -342,7 +411,13 @@ async function submit() {
       return
     }
     title = simpleQuery.value.trim().slice(0, 60)
-    if (useRefAudio.value) {
+    // sample_mode hands the description to a language model, which writes
+    // its own caption, lyrics and metadata from it - and the server clears
+    // `prompt` outright when it is set, so the words typed here never reach
+    // the music model. That is the feature when you want lyrics written for
+    // you, and the whole problem when you came with a style in mind, so it is
+    // a choice rather than a silent default.
+    if (useRefAudio.value || !letAiWrite.value) {
       req.prompt = simpleQuery.value.trim()
     } else {
       req.sample_query = simpleQuery.value.trim()
@@ -392,6 +467,11 @@ async function submit() {
   submitting.value = true
   try {
     await store.submit(req, refFile, title)
+    // ACE-Step builds its pipeline lazily, so /lora/status answers with
+    // "model not initialized" until something has actually been generated.
+    // After a run it can be asked properly, which is when a stray adapter
+    // from an earlier session finally becomes visible.
+    void syncLoraFromEngine()
   } catch (err) {
     formError.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -482,6 +562,15 @@ async function submit() {
       <div v-if="mode === 'simple'" class="space-y-1.5">
         <label class="text-sm font-medium text-text">{{ t('aceGen.simpleLabel') }}</label>
         <textarea v-model="simpleQuery" rows="3" class="w-full rounded-lg border border-border bg-panel-2 p-2.5 text-sm text-text" :placeholder="t('aceGen.simplePlaceholder')"></textarea>
+        <label v-if="!useRefAudio" class="flex items-start gap-2 text-xs text-text-dim">
+          <input v-model="letAiWrite" type="checkbox" class="mt-0.5 accent-accent1" />
+          <span>
+            {{ t('aceGen.letAiWrite') }}
+            <span class="block text-[11px] opacity-80">
+              {{ letAiWrite ? t('aceGen.letAiWriteOn') : t('aceGen.letAiWriteOff') }}
+            </span>
+          </span>
+        </label>
       </div>
 
       <div v-else class="space-y-3">
@@ -636,6 +725,12 @@ async function submit() {
             <label class="text-xs text-text-dim">{{ t('aceGen.loraStrength', { value: loraScaleVal.toFixed(2) }) }}</label>
             <input v-model.number="loraScaleVal" type="range" min="0" max="2" step="0.05" class="w-full accent-accent1" />
           </div>
+          <p v-if="strayLora" class="flex flex-wrap items-center gap-2 rounded-lg border border-status-failed/40 bg-status-failed/10 p-2 text-xs text-status-failed">
+            <span>{{ t('aceGen.strayLora', { name: strayLora }) }}</span>
+            <button type="button" class="rounded border border-status-failed/50 px-2 py-0.5 hover:bg-status-failed/20" @click="unloadStrayLora">
+              {{ t('aceGen.unloadLora') }}
+            </button>
+          </p>
           <p v-if="loraStatus" class="text-xs text-status-failed">{{ loraStatus }}</p>
           <div class="flex items-center gap-2">
             <input v-model="newLoraName" type="text" :placeholder="t('aceGen.loraNamePlaceholder')" class="w-1/3 rounded-lg border border-border bg-panel-2 p-1.5 text-xs text-text" />
