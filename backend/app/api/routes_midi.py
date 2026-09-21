@@ -57,7 +57,7 @@ async def start_midi(track_id: int, source: str, force: bool = False):
     if manager.state.models["yue2"].status != ModelStatus.RUNNING:
         raise HTTPException(
             status_code=409,
-            detail="MIDI-транскрипция работает через сервер YuE2 — сначала сделайте YuE2 активной моделью",
+            detail="MIDI-транскрипция работает через сервер YuE2: сначала сделайте YuE2 активной моделью",
         )
     path = midi.source_audio_path(track_id, source)
     if not path or not path.exists():

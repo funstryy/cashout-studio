@@ -14,16 +14,17 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 
 from .. import db
 from ..config import MODELS
+from .routes_users import current_user_id
 
 router = APIRouter(prefix="/api/tracks", tags=["tracks"])
 
 ALLOWED_AUDIO_EXT = {"wav", "mp3", "flac"}
-ALLOWED_TRACK_MODELS = set(MODELS.keys()) | {"editor", "upload"}
+ALLOWED_TRACK_MODELS = set(MODELS.keys()) | {"editor", "upload", "voices", "separation", "plugins"}
 
 
 def _sanitize(text: str) -> str:
@@ -157,18 +158,19 @@ async def upload_track(
 
 
 @router.get("")
-async def list_tracks(model: Optional[str] = None):
+async def list_tracks(model: Optional[str] = None, user_id: int = Depends(current_user_id)):
     if model is not None and model not in ALLOWED_TRACK_MODELS:
         raise HTTPException(status_code=400, detail=f"unknown track model/origin '{model}'")
-    return {"data": [_row_to_dict(r) for r in db.list_tracks(model)]}
+    return {"data": [_row_to_dict(r) for r in db.list_tracks(model, user_id)]}
 
 
 @router.get("/{track_id}/audio")
 async def track_audio(track_id: int):
     row = db.get_track(track_id)
-    if not row or not Path(row["audio_path"]).exists():
+    path = db.resolve_media_path(row["audio_path"]) if row else None
+    if not path:
         return JSONResponse({"error": "audio not found"}, status_code=404)
-    return FileResponse(row["audio_path"])
+    return FileResponse(path)
 
 
 @router.get("/{track_id}/abc")

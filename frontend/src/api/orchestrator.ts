@@ -26,8 +26,30 @@ export function getStatus(): Promise<OrchestratorStatus> {
   return apiFetch<OrchestratorStatus>('/api/orchestrator/status')
 }
 
+export interface DownloadProgress {
+  file: string
+  percent: number
+  downloaded: string
+  total: string
+  eta: string
+  rate: string
+}
+
+/** Checkpoints an engine is fetching right now: empty once it's done. */
+export async function getDownloads(model: ModelId = 'ace_step'): Promise<DownloadProgress[]> {
+  const json = await apiFetch<{ downloads: DownloadProgress[] }>(
+    `/api/orchestrator/downloads?model=${encodeURIComponent(model)}`,
+  )
+  return json.downloads
+}
+
 export function switchModel(model: ModelId): Promise<OrchestratorStatus> {
   return apiJson<OrchestratorStatus>('/api/orchestrator/switch', { model })
+}
+
+/** Omit the model to stop every running engine. */
+export function stopModel(model?: ModelId): Promise<OrchestratorStatus> {
+  return apiJson<OrchestratorStatus>(`/api/orchestrator/stop${model ? `?model=${model}` : ''}`, {})
 }
 
 export function stopActive(): Promise<OrchestratorStatus> {

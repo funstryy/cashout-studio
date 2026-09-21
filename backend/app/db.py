@@ -71,11 +71,196 @@ def get_db() -> sqlite3.Connection:
             """
         )
         _db.commit()
+        _db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        _db.commit()
+        # Profiles, not accounts: this is one machine's studio, so a profile
+        # separates whose work is whose. It is deliberately not a security
+        # boundary - anyone at this machine can pick any profile, and the
+        # database is a plain file either way. A password box here would imply
+        # protection that a local app cannot provide.
+        if _db.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"] == 0:
+            _db.execute(
+                "INSERT INTO users (name, created_at) VALUES (?, ?)",
+                ("Studio", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
+            )
+            _db.commit()
+
+        # Existing work predates profiles, so it belongs to the first one
+        # rather than becoming invisible the moment profiles arrive.
+        first_user = _db.execute("SELECT MIN(id) AS id FROM users").fetchone()["id"]
+        for table in ("tracks", "projects"):
+            columns = {r["name"] for r in _db.execute(f"PRAGMA table_info({table})").fetchall()}
+            if "user_id" not in columns:
+                _db.execute(f"ALTER TABLE {table} ADD COLUMN user_id INTEGER")
+                _db.execute(f"UPDATE {table} SET user_id = ?", (first_user,))
+                _db.commit()
+
+        _repair_moved_media(_db)
+
+        _db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS spotify_accounts (
+                user_id INTEGER PRIMARY KEY,
+                client_id TEXT NOT NULL DEFAULT '',
+                access_token TEXT NOT NULL DEFAULT '',
+                refresh_token TEXT NOT NULL DEFAULT '',
+                expires_at REAL NOT NULL DEFAULT 0,
+                display_name TEXT NOT NULL DEFAULT '',
+                connected_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        _db.commit()
+
         _db.execute("CREATE INDEX IF NOT EXISTS idx_tracks_model_id ON tracks(model, id DESC);")
         _db.execute("CREATE INDEX IF NOT EXISTS idx_tracks_created ON tracks(created_at DESC);")
         _db.execute("CREATE INDEX IF NOT EXISTS idx_projects_updated ON projects(updated_at DESC);")
+        _db.execute("CREATE INDEX IF NOT EXISTS idx_tracks_user ON tracks(user_id, id DESC);")
         _db.commit()
     return _db
+
+
+def resolve_media_path(stored: str) -> Optional[Path]:
+    """The file this row points at, wherever it actually is now.
+
+    Rows hold absolute paths, which stop being true the moment the install
+    moves - renaming the app folder did exactly that, and every track recorded
+    before the rename pointed into a directory that no longer existed. The
+    layout under files/ is stable even when its parent is not, so a stored
+    path is re-rooted at this install's files directory before giving up.
+    """
+    path = Path(stored)
+    if path.exists():
+        return path
+    parts = path.parts
+    for i in range(len(parts) - 2, -1, -1):
+        if parts[i].lower() == "files":
+            candidate = FILES_DIR.joinpath(*parts[i + 1:])
+            if candidate.exists():
+                return candidate
+    return None
+
+
+def _repair_moved_media(conn: sqlite3.Connection) -> int:
+    """Rewrites rows whose files have moved, once, at startup.
+
+    Resolving on every read would work too, but would leave every row
+    permanently wrong and quietly paper over it; a track's recorded location
+    should be where the track is.
+    """
+    repaired = 0
+    for row in conn.execute("SELECT id, audio_path, abc_path, stems_json FROM tracks").fetchall():
+        updates: dict[str, str] = {}
+        for column in ("audio_path", "abc_path"):
+            stored = row[column]
+            if not stored or Path(stored).exists():
+                continue
+            found = resolve_media_path(stored)
+            if found:
+                updates[column] = str(found)
+
+        if row["stems_json"]:
+            try:
+                stems = json.loads(row["stems_json"])
+            except (TypeError, ValueError):
+                stems = None
+            if isinstance(stems, dict):
+                moved = False
+                for name, stored in list(stems.items()):
+                    if not stored or Path(stored).exists():
+                        continue
+                    found = resolve_media_path(stored)
+                    if found:
+                        stems[name] = str(found)
+                        moved = True
+                if moved:
+                    updates["stems_json"] = json.dumps(stems, ensure_ascii=False)
+
+        if updates:
+            assignments = ", ".join(f"{column} = ?" for column in updates)
+            conn.execute(
+                f"UPDATE tracks SET {assignments} WHERE id = ?",
+                (*updates.values(), row["id"]),
+            )
+            repaired += 1
+    if repaired:
+        conn.commit()
+    return repaired
+
+
+def get_spotify_account(user_id: int) -> Optional[dict]:
+    row = get_db().execute(
+        "SELECT * FROM spotify_accounts WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def save_spotify_client_id(user_id: int, client_id: str) -> None:
+    """Stored per profile, not per machine.
+
+    A listening history is about as personal as this app gets, and profiles
+    already exist to keep one person's work from showing up in another's.
+    Changing the client ID drops any existing tokens: they were issued by a
+    different Spotify application and will not refresh against this one.
+    """
+    conn = get_db()
+    existing = get_spotify_account(user_id)
+    if existing and existing["client_id"] == client_id:
+        return
+    conn.execute(
+        """
+        INSERT INTO spotify_accounts (user_id, client_id) VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            client_id = excluded.client_id,
+            access_token = '', refresh_token = '', expires_at = 0, display_name = ''
+        """,
+        (user_id, client_id),
+    )
+    conn.commit()
+
+
+def save_spotify_tokens(user_id: int, *, access_token: str, refresh_token: str,
+                        expires_at: float, display_name: Optional[str] = None) -> None:
+    conn = get_db()
+    if display_name is None:
+        conn.execute(
+            """UPDATE spotify_accounts
+               SET access_token = ?, refresh_token = ?, expires_at = ?
+               WHERE user_id = ?""",
+            (access_token, refresh_token, expires_at, user_id),
+        )
+    else:
+        conn.execute(
+            """UPDATE spotify_accounts
+               SET access_token = ?, refresh_token = ?, expires_at = ?,
+                   display_name = ?, connected_at = ?
+               WHERE user_id = ?""",
+            (access_token, refresh_token, expires_at, display_name,
+             time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), user_id),
+        )
+    conn.commit()
+
+
+def clear_spotify_tokens(user_id: int) -> None:
+    """Disconnect. The client ID is kept - it is the user's own application
+    registration and they will want it again if they reconnect."""
+    conn = get_db()
+    conn.execute(
+        """UPDATE spotify_accounts
+           SET access_token = '', refresh_token = '', expires_at = 0,
+               display_name = '', connected_at = ''
+           WHERE user_id = ?""",
+        (user_id,),
+    )
+    conn.commit()
 
 
 def model_dir(model: str) -> Path:
@@ -103,11 +288,12 @@ def insert_track(
     params: dict[str, Any],
     audio_path: Path,
     abc_path: Optional[Path],
+    user_id: Optional[int] = None,
 ) -> int:
     db = get_db()
     cur = db.execute(
-        "INSERT INTO tracks (model, created_at, title, lyrics, seed, duration_ms, wall_ms, params_json, audio_path, abc_path)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO tracks (model, created_at, title, lyrics, seed, duration_ms, wall_ms, params_json, audio_path, abc_path, user_id)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             model,
             time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -119,17 +305,62 @@ def insert_track(
             json.dumps(params, ensure_ascii=False),
             str(audio_path),
             str(abc_path) if abc_path else None,
+            user_id if user_id is not None else default_user_id(),
         ),
     )
     db.commit()
     return cur.lastrowid
 
 
-def list_tracks(model: Optional[str] = None) -> list[sqlite3.Row]:
+def list_tracks(model: Optional[str] = None, user_id: Optional[int] = None) -> list[sqlite3.Row]:
     db = get_db()
+    clauses, params = [], []
     if model:
-        return db.execute("SELECT * FROM tracks WHERE model = ? ORDER BY id DESC", (model,)).fetchall()
-    return db.execute("SELECT * FROM tracks ORDER BY id DESC").fetchall()
+        clauses.append("model = ?")
+        params.append(model)
+    if user_id is not None:
+        # Rows from before profiles existed have no owner; showing them to
+        # everyone beats hiding someone's back catalogue.
+        clauses.append("(user_id = ? OR user_id IS NULL)")
+        params.append(user_id)
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    return db.execute(f"SELECT * FROM tracks{where} ORDER BY id DESC", params).fetchall()
+
+
+# --- profiles --------------------------------------------------------------
+
+def default_user_id() -> int:
+    row = get_db().execute("SELECT MIN(id) AS id FROM users").fetchone()
+    return row["id"] if row and row["id"] is not None else 1
+
+
+def list_users() -> list[sqlite3.Row]:
+    return get_db().execute("SELECT * FROM users ORDER BY id").fetchall()
+
+
+def get_user(user_id: int) -> Optional[sqlite3.Row]:
+    return get_db().execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+
+def create_user(name: str) -> int:
+    db = get_db()
+    cur = db.execute(
+        "INSERT INTO users (name, created_at) VALUES (?, ?)",
+        (name, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
+    )
+    db.commit()
+    return cur.lastrowid
+
+
+def delete_user(user_id: int) -> bool:
+    """Removes the profile only. Their tracks stay on disk and in the
+    database: deleting a profile should not quietly destroy recordings."""
+    db = get_db()
+    if not get_user(user_id) or len(list_users()) <= 1:
+        return False
+    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    db.commit()
+    return True
 
 
 def get_track(track_id: int) -> Optional[sqlite3.Row]:
@@ -176,6 +407,11 @@ def delete_track_stems(track_id: int) -> bool:
     shutil.rmtree(stems_dir(row["model"], track_id), ignore_errors=True)
     update_track_stems(track_id, None)
     return True
+
+
+def get_track_stems(track_id: int) -> dict[str, str]:
+    row = get_track(track_id)
+    return json.loads(row["stems_json"]) if row and row["stems_json"] else {}
 
 
 def get_track_midi(track_id: int) -> dict[str, str]:

@@ -56,6 +56,27 @@ export function defaultChannelSettings(): ChannelSettings {
   }
 }
 
+/**
+ * Fills in whatever a channel's settings are missing.
+ *
+ * Anything arriving from outside this machine - a collaborator's lane, a
+ * project saved before a control existed - can be short of a field, and the
+ * mixer reads them without asking: `s.eq.low` on a lane with no eq throws
+ * during render and takes the page with it. Measured on a lane that came
+ * over a live session with only volume and pan set.
+ */
+export function withChannelDefaults(partial: Partial<ChannelSettings> | undefined): ChannelSettings {
+  const base = defaultChannelSettings()
+  if (!partial) return base
+  return {
+    ...base,
+    ...partial,
+    eq: { ...base.eq, ...(partial.eq ?? {}) },
+    comp: { ...base.comp, ...(partial.comp ?? {}) },
+    reverb: { ...base.reverb, ...(partial.reverb ?? {}) },
+  }
+}
+
 export function defaultMasterSettings(): MasterSettings {
   const { pan: _pan, muted: _muted, solo: _solo, ...rest } = defaultChannelSettings()
   return rest

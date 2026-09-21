@@ -145,6 +145,28 @@ export async function cancelAllTasks(): Promise<void> {
   await apiJson(`${BASE}/cancel_all_tasks`, {})
 }
 
+export interface LoraStatus {
+  lora_loaded: boolean
+  use_lora: boolean
+  lora_scale: number
+  active_adapter: string | null
+  adapters: string[]
+}
+
+/**
+ * What the engine actually has loaded.
+ *
+ * A LoRA lives in the running ACE-Step process, not in this page, so it
+ * survives a reload, a navigation, and closing the tab. Without asking, the
+ * form would show no adapter selected while every generation was still being
+ * pulled towards one - which looks exactly like the model ignoring the style
+ * it was given.
+ */
+export async function loraStatus(): Promise<LoraStatus | null> {
+  const wrapped = await apiFetch<{ data: LoraStatus | null }>(`${BASE}/v1/lora/status`)
+  return wrapped?.data ?? null
+}
+
 export async function loraLoad(loraPath: string, adapterName?: string): Promise<void> {
   await apiJson(`${BASE}/v1/lora/load`, { lora_path: loraPath, adapter_name: adapterName })
 }

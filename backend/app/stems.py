@@ -4,13 +4,19 @@ Unlike ACE-Step/YuE2, Demucs isn't a persistent HTTP server tracked in
 MODELS/OrchestratorState - it's a one-shot CLI job. This module keeps its own
 tiny in-memory job registry and drives the subprocess directly.
 
-Runs alongside whatever model (if any) is currently active, rather than
-stopping it first: measured peak VRAM for a real separation is only ~1GB
-above baseline (htdemucs is a small model), which comfortably coexists with
-ACE-Step/YuE2 on this card - no need to evict the active model for this.
-`_gpu_lock` below only serializes multiple *Demucs* jobs against each other
-(so two simultaneous separations don't thrash the GPU scheduling each
-other), independent of orchestrator.manager's model-switching lock.
+Runs alongside whatever model (if any) is currently active rather than
+stopping it first, but deliberately stays out of that model's way:
+
+  - It runs on the CPU (DEMUCS_DEVICE). The torch build installed for AMD/Windows
+    is CPU-only anyway (see setup_models.ps1), and keeping it there means a
+    separation never competes for VRAM with an active YuE2/ACE-Step - which
+    matters on a 6-8 GB card where YuE2-3B alone is most of the budget.
+  - It is capped to a share of the CPU (DEMUCS_THREADS). Uncapped, torch
+    takes a thread per physical core, and a separation started mid-generation
+    makes the whole app - including the UI's own request handling - crawl.
+
+`_job_lock` below additionally serializes multiple *Demucs* jobs against
+each other, independent of orchestrator.manager's model-switching lock.
 """
 from __future__ import annotations
 
@@ -24,14 +30,14 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from . import db
-from .config import DEMUCS_DIR, FFMPEG_BIN_DIR, LOG_DIR
+from .config import DEMUCS_DEVICE, DEMUCS_DIR, DEMUCS_EXE, DEMUCS_THREADS, FFMPEG_BIN_DIR, LOG_DIR
 from .orchestrator.process import tail_log
 
 IS_WINDOWS = sys.platform == "win32"
 
 STEM_NAMES = ("vocals", "drums", "bass", "other")
 
-_gpu_lock = asyncio.Lock()
+_job_lock = asyncio.Lock()
 
 JobStatus = Literal["queued", "running", "done", "failed", "cancelled"]
 
@@ -80,9 +86,9 @@ def forget(track_id: int) -> None:
 
 
 async def _kill_tree(proc: asyncio.subprocess.Process) -> None:
-    # `uv run demucs ...` spawns demucs as a child process, so plain
-    # terminate()/kill() on the "uv" process alone leaves the actual
-    # GPU computation running. Mirrors ManagedProcess._force_kill().
+    # /T: demucs itself forks worker processes for the separation, which a
+    # plain kill() of the launched interpreter would leave running.
+    # Mirrors ManagedProcess._force_kill().
     if IS_WINDOWS:
         killer = await asyncio.create_subprocess_exec(
             "taskkill", "/PID", str(proc.pid), "/T", "/F",
@@ -115,7 +121,7 @@ async def _run(track_id: int) -> None:
     job = _jobs[track_id]
     log_name = f"demucs_{track_id}"
     try:
-        async with _gpu_lock:
+        async with _job_lock:
             if job.cancel_requested:
                 job.status = "cancelled"
                 return
@@ -139,10 +145,16 @@ async def _run(track_id: int) -> None:
             log_path = LOG_DIR / f"{log_name}.log"
             env = os.environ.copy()
             env["PATH"] = f"{FFMPEG_BIN_DIR}{os.pathsep}{env.get('PATH', '')}"
+            # torch reads these at import time; -d cpu alone would still let
+            # it spin up one thread per core.
+            env["OMP_NUM_THREADS"] = str(DEMUCS_THREADS)
+            env["MKL_NUM_THREADS"] = str(DEMUCS_THREADS)
 
             with open(log_path, "w", encoding="utf-8", errors="replace") as log_file:
                 proc = await asyncio.create_subprocess_exec(
-                    "uv", "run", "demucs", "-n", "htdemucs", "-o", str(out_dir), str(audio_path),
+                    str(DEMUCS_EXE),
+                    "-n", "htdemucs", "-d", DEMUCS_DEVICE,
+                    "-o", str(out_dir), str(audio_path),
                     cwd=str(DEMUCS_DIR),
                     env=env,
                     stdout=log_file,

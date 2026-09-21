@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from ..config import MODELS
+from ..config import CONCURRENT_ENGINES, MODELS
 from .process import ManagedProcess
 from .state import ModelRuntimeState, ModelStatus, OrchestratorState
 
@@ -11,11 +11,13 @@ logger = logging.getLogger("orchestrator")
 
 
 class OrchestratorManager:
-    """Owns the on/off state of both models and enforces mutual exclusion.
+    """Owns the on/off state of both models.
 
-    A single asyncio.Lock serializes switch_to()/stop_active() calls so that
-    rapid clicks in the UI can't start two model process trees concurrently
-    or interleave a stop with a start.
+    A single asyncio.Lock serializes switch_to()/stop_*() calls so that rapid
+    clicks in the UI can't start the same model twice or interleave a stop
+    with a start. Whether starting one engine stops the other depends on
+    CONCURRENT_ENGINES: they only need to take turns when they compete for
+    the same device.
     """
 
     def __init__(self) -> None:
@@ -41,17 +43,35 @@ class OrchestratorManager:
         if model_id not in MODELS:
             raise ValueError(f"unknown model '{model_id}'")
         async with self._lock:
-            current = self.state.active_model
-            if current == model_id and self.state.models[model_id].status == ModelStatus.RUNNING:
+            if self.state.models[model_id].status == ModelStatus.RUNNING:
+                # Already up - selecting it just makes it the one the UI
+                # treats as current.
+                self.state.active_model = model_id
                 return
-            if current is not None and current != model_id:
-                await self._stop_model(current)
+            if not CONCURRENT_ENGINES:
+                for other_id, rs in self.state.models.items():
+                    if other_id != model_id and rs.status == ModelStatus.RUNNING:
+                        await self._stop_model(other_id)
             await self._start_model(model_id)
 
-    async def stop_active(self) -> None:
+    async def stop_one(self, model_id: str) -> None:
+        if model_id not in MODELS:
+            raise ValueError(f"unknown model '{model_id}'")
         async with self._lock:
-            if self.state.active_model is not None:
-                await self._stop_model(self.state.active_model)
+            if self.state.models[model_id].status != ModelStatus.STOPPED:
+                await self._stop_model(model_id)
+
+    async def stop_all(self) -> None:
+        """Every running engine, for shutdown.
+
+        stop_active() only ever stopped one, which was the whole story when
+        one was the maximum. With both able to run, using it at shutdown
+        would leave the other engine's process tree orphaned.
+        """
+        async with self._lock:
+            for model_id, rs in list(self.state.models.items()):
+                if rs.status in (ModelStatus.RUNNING, ModelStatus.STARTING):
+                    await self._stop_model(model_id)
 
     async def _start_model(self, model_id: str) -> None:
         definition = MODELS[model_id]

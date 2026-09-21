@@ -19,8 +19,22 @@ async function parseErrorBody(resp: Response): Promise<string> {
   }
 }
 
+/** The active profile, read lazily to avoid an import cycle with users.ts.
+ * Every request carries it so the backend can scope history to one person. */
+function userHeader(): Record<string, string> {
+  try {
+    const id = localStorage.getItem('cashout_studio_user_id')
+    return id ? { 'X-User-Id': id } : {}
+  } catch {
+    return {}
+  }
+}
+
 export async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const resp = await fetch(url, init)
+  const resp = await fetch(url, {
+    ...init,
+    headers: { ...(init?.headers as Record<string, string> | undefined), ...userHeader() },
+  })
   if (!resp.ok) {
     throw new ApiError(await parseErrorBody(resp), resp.status)
   }
