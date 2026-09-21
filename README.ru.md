@@ -8,24 +8,28 @@
 <p align="center"><i>Made by Cashout PT.5</i></p>
 
 <p align="center">
-  Локальная студия генерации и продакшна музыки на нейросетях — один интерфейс для <b>ACE-Step 1.5</b> и <b>YuE2-3B</b> со встроенной многодорожечной DAW.
+  Полноценная локальная студия: многодорожечный DAW с нативным аудиодвижком
+  на C++ и ИИ, который считает на вашей видеокарте. Без аккаунта, без
+  загрузок, без подписки.
 </p>
 
-<p align="center">🚧 В активной разработке — возможны breaking changes, баги и шероховатости. Ещё не стабильный релиз.</p>
-
-<p align="center">
-  <img alt="Статус" src="https://img.shields.io/badge/статус-в%20разработке-eab308?style=flat-square">
-  <a href="LICENSE.ru.md"><img alt="Лицензия" src="https://img.shields.io/badge/лицензия-MIT-22c55e?style=flat-square"></a>
-  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-0f0f14?style=flat-square">
-  <img alt="GPU" src="https://img.shields.io/badge/GPU-AMD%20Vulkan%20%7C%20NVIDIA%20CUDA-0ea5e9?style=flat-square">
-  <img alt="Stack" src="https://img.shields.io/badge/stack-Vue%203%20%2B%20FastAPI-a855f7?style=flat-square">
-  <img alt="UI languages" src="https://img.shields.io/badge/UI-RU%20%2F%20EN-ec4899?style=flat-square">
-  <a href="https://ko-fi.com/inikolax"><img alt="Поддержать на Ko-fi" src="https://img.shields.io/badge/Поддержать-Ko--fi-FF5E5B?style=flat-square&logo=ko-fi&logoColor=white"></a>
-</p>
+<p align="center">🚧 Активно в разработке. Ожидайте ломающих изменений, багов и шероховатостей. Это ещё не стабильный релиз.</p>
 
 <p align="center">
-  <img src="docs/hero-poster-ru.png" alt="Cashout Studio — создано с AI, сделано тобой" width="900">
+  <img alt="Статус" src="https://img.shields.io/badge/%D1%81%D1%82%D0%B0%D1%82%D1%83%D1%81-%D0%B2%20%D1%80%D0%B0%D0%B7%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%BA%D0%B5-eab308?style=flat-square">
+  <a href="LICENSE"><img alt="Лицензия" src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square"></a>
+  <img alt="Платформа" src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0f0f14?style=flat-square">
+  <img alt="Аудио" src="https://img.shields.io/badge/audio-WASAPI%20%2B%20VST3-24e1c0?style=flat-square">
+  <img alt="GPU" src="https://img.shields.io/badge/GPU-Vulkan%20%7C%20DirectML-0ea5e9?style=flat-square">
+  <img alt="Стек" src="https://img.shields.io/badge/stack-C%2B%2B%20%2B%20FastAPI%20%2B%20Vue%203-a855f7?style=flat-square">
+  <img alt="Языки интерфейса" src="https://img.shields.io/badge/UI-EN%20%2F%20RU-ec4899?style=flat-square">
 </p>
+
+<p align="center">
+  <img src="docs/hero-ru.png" alt="Cashout Studio: DAW, микшер и ИИ-инструменты в одном окне" width="960">
+</p>
+
+<p align="center"><sub>Это не макет. Это снятое приложение.</sub></p>
 
 <p align="center">
   <a href="#зачем-это-нужно">Зачем</a> ·

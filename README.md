@@ -8,24 +8,28 @@
 <p align="center"><i>Made by Cashout PT.5</i></p>
 
 <p align="center">
-  A local, GPU-powered music generation and production studio — one interface for <b>ACE-Step 1.5</b> and <b>YuE2-3B</b>, with a built-in multitrack DAW.
+  A complete, local music production studio: a multitrack DAW with a native
+  C++ audio engine, and AI that runs on your own graphics card. No account,
+  no uploads, nothing to cancel.
 </p>
 
-<p align="center">🚧 Actively in development — expect breaking changes, bugs, and rough edges. Not a stable release yet.</p>
+<p align="center">🚧 Actively in development. Expect breaking changes, bugs and rough edges. Not a stable release yet.</p>
 
 <p align="center">
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-eab308?style=flat-square">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square"></a>
-  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-0f0f14?style=flat-square">
-  <img alt="GPU" src="https://img.shields.io/badge/GPU-AMD%20Vulkan%20%7C%20NVIDIA%20CUDA-0ea5e9?style=flat-square">
-  <img alt="Stack" src="https://img.shields.io/badge/stack-Vue%203%20%2B%20FastAPI-a855f7?style=flat-square">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0f0f14?style=flat-square">
+  <img alt="Audio" src="https://img.shields.io/badge/audio-WASAPI%20%2B%20VST3-24e1c0?style=flat-square">
+  <img alt="GPU" src="https://img.shields.io/badge/GPU-Vulkan%20%7C%20DirectML-0ea5e9?style=flat-square">
+  <img alt="Stack" src="https://img.shields.io/badge/stack-C%2B%2B%20%2B%20FastAPI%20%2B%20Vue%203-a855f7?style=flat-square">
   <img alt="UI languages" src="https://img.shields.io/badge/UI-EN%20%2F%20RU-ec4899?style=flat-square">
-  <a href="https://ko-fi.com/inikolax"><img alt="Support on Ko-fi" src="https://img.shields.io/badge/Support-Ko--fi-FF5E5B?style=flat-square&logo=ko-fi&logoColor=white"></a>
 </p>
 
 <p align="center">
-  <img src="docs/hero-poster.png" alt="Cashout Studio — made with AI, made by you" width="900">
+  <img src="docs/hero.png" alt="Cashout Studio: the DAW, the mixer and the AI tools in one window" width="960">
 </p>
+
+<p align="center"><sub>Not a mockup. That is the application, captured running.</sub></p>
 
 <p align="center">
   <a href="#why-this-exists">Why</a> ·

@@ -1234,7 +1234,7 @@ export default {
       { name: 'Models', body: 'ACE-Step for music and LoRA training, Stable Audio for instrumental ideas, BS-RoFormer / Mel-Band RoFormer / HTDemucs for separation, all through DirectML.' },
     ],
     licenceTitle: 'Licence and credits',
-    licence: 'Cashout Studio is released for personal use. The models it runs carry their own licences from their own authors, and using this studio does not change them: if you are releasing commercially, check the terms of the model that made the sound.',
+    licence: 'Cashout Studio is MIT licensed, and is a derivative of Remiqora by Nikolay Cherkashin, used under the same licence. You may use, modify and sell it, provided the copyright notice travels with it. The models it runs carry their own licences from their own authors, and this studio does not change them: if you are releasing commercially, check the terms of the model that made the sound.',
   },
   tour: {
     skip: 'Skip',
