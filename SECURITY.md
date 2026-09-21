@@ -1,4 +1,4 @@
-# Security
+﻿# Security
 
 ## What this software is, in security terms
 
@@ -44,7 +44,7 @@ found a security problem and how to reach you, without the details.
 Please include what you did, what happened, and what you expected. A proof
 of concept helps enormously and does not need to be polished.
 
-[advisory]: https://github.com/CASHOUT-PT5/cashout-studio/security/advisories/new
+[advisory]: https://github.com/funstryy/cashout-studio/security/advisories/new
 
 ## What to expect
 
